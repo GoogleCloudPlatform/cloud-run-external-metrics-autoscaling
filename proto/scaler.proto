@@ -1,0 +1,98 @@
+/*
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package crema;
+
+import "proto/scaled_object.proto";
+
+option java_package = "com.google.cloud.run.crema";
+option java_multiple_files = true;
+option go_package = "metric-provider/proto";
+
+service Scaler {
+  // Schedule additional invocations to Cloud Tasks
+  rpc Schedule(ScheduleRequest) returns (ScheduleResponse) {
+    // TODO: Add deadline
+  }
+
+  // Scale workloads based on provided metrics and targets
+  rpc Scale(ScaleRequest) returns (ScaleResponse) {
+    // TODO: Add deadline
+  }
+}
+
+message ScaleRequest {
+  // A list of metrics for scaled objects.
+  repeated ScaledObjectMetrics scaled_object_metrics = 1;
+}
+
+message ScaleResponse {
+  // A list of scaling results, one per scaled object.
+  repeated ScalingResult results = 1;
+}
+
+message ScaledObjectMetrics {
+  // The scaled object.
+  ScaledObject scaled_object = 1;
+
+  // Metrics corresponding to the triggers specified in the ScaledObject.
+  repeated Metric metrics = 2;
+}
+
+message Metric {
+  // The current observed value of the metric.
+  double value = 1;
+
+  // Defines the target for this metric, used for scaling decisions.
+  oneof target {
+    // Specifies the target value of a metric summed across all instances.
+    double target_value = 2;
+
+    // Specifies the *per-instance* target value of the metric.
+    double target_average_value = 3;
+  }
+
+  // ID to associated the metric and target to a specific trigger in the
+  // ScaledObject which references this metric.
+  string trigger_id = 4;
+
+  // The type of scaling trigger the metric corresponds to e.g. `kafka`,
+  // `github-runner`, `temporal`.
+  string trigger_type = 5;
+}
+
+message ScalingResult {
+  // The name of the resource being scaled.
+  string scale_target_name = 1;
+
+  ScalingStatus status = 2;
+}
+
+enum ScalingStatus {
+  SCALING_STATUS_UNSPECIFIED = 0;
+  SUCCEEDED = 1;
+  FAILED = 2;
+}
+
+message ScheduleRequest {
+  // The request headers from the original invocation request. Used to determine
+  // whether Scaler should schedule additional invocations i.e. via Cloud Tasks.
+  map<string, string> headers = 1;
+}
+
+message ScheduleResponse {}

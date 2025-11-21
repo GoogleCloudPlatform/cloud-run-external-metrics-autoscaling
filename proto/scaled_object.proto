@@ -1,0 +1,103 @@
+/*
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package crema;
+
+import "google/protobuf/duration.proto";
+
+option java_package = "com.google.cloud.run.crema";
+option java_multiple_files = true;
+option go_package = "metric-provider/proto";
+
+// Atomic unit of information for CREMA. Each ScaledObject describes
+// the way to scale a single Cloud Run service or workerpool.
+message ScaledObject {
+  // A reference to the Cloud Run resource being scaled.
+  ScaleTargetRef scale_target_ref = 1;
+
+  // Configuration for self-scheduling additional invocations of CREMA.
+  SelfSchedulingConfig self_scheduling_config = 2;
+
+  // HPA-style advanced configuration.
+  Advanced advanced = 3;
+}
+
+message ScaleTargetRef {
+  // The fully qualified name of the Cloud Run resource being scaled e.g.
+  // projects/my-project/locations/us-central1/services/my-service.
+  string name = 1;
+}
+
+message SelfSchedulingConfig {
+  // NOTE: This field is only effective if the desired scaling interval
+  // is less than 60 seconds (i.e. the minimum interval that Cloud
+  // Scheduler provides).
+  google.protobuf.Duration scaling_interval = 1;
+
+  // The fully qualified name of the Cloud Tasks queue to use for scheduling
+  // additional invocations.
+  string cloud_tasks_queue = 2;
+
+  // The service account email to include in the Cloud Tasks queue.
+  string tasks_service_account_email = 3;
+}
+
+message Advanced {
+  ScalerConfig scaler_config = 1;
+
+  message ScalerConfig {
+    Behavior behavior = 1;
+
+    int32 min_instances = 2;
+
+    int32 max_instances = 3;
+
+    message Behavior {
+      Scaling scale_down = 1;
+
+      Scaling scale_up = 2;
+
+      message Scaling {
+        int32 stabilization_window_seconds = 1;
+
+        repeated Policy policies = 2;
+
+        message Policy {
+          Type type = 1;
+          int32 value = 2;
+          int32 period_seconds = 3;
+
+          enum Type {
+            TYPE_UNSPECIFIED = 0;
+            PERCENT = 1;
+            INSTANCES = 2;
+          }
+        }
+
+        SelectPolicy select_policy = 3;
+
+        enum SelectPolicy {
+          SELECT_POLICY_UNSPECIFIED = 0;
+          MAX = 1;
+          MIN = 2;
+          DISABLED = 3;
+        }
+      }
+    }
+  }
+}
