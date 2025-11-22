@@ -163,6 +163,7 @@ gcloud beta run deploy $SERVICE_NAME \
   --no-allow-unauthenticated \
   --no-cpu-throttling \
   --base-image=us-central1-docker.pkg.dev/serverless-runtimes/google-22/runtimes/java21 \
+  --labels=created-by=crema \
   --set-env-vars="CREMA_CONFIG=${CREMA_CONFIG_PARAM_VERSION},OUTPUT_SCALER_METRICS=True"
 ```
 

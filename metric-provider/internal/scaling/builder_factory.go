@@ -48,19 +48,19 @@ func NewBuilderFactory(authResolver *auth.Resolver, globalHTTPTimeout time.Durat
 
 // MakeBuilders returns a list of ScalerBuilders for the specified triggers.
 // This allows the function to attempt to build all scalers and report on the success or failure of each.
-func (sb *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, asMetricSource bool) ([]cache.ScalerBuilder, error) {
-	logger := sb.logger.WithValues("type", scaledObject.Kind, "namespace", scaledObject.Namespace, "name", scaledObject.Name)
-	result := make([]cache.ScalerBuilder, 0, len(scaledObject.Spec.Triggers))
+func (bf *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, asMetricSource bool) ([]cache.ScalerBuilder, error) {
+	logger := bf.logger.WithValues("scaleTargetName", scaledObject.Spec.ScaleTargetRef.Name)
+	builders := make([]cache.ScalerBuilder, 0, len(scaledObject.Spec.Triggers))
 
 	for i, trigger := range scaledObject.Spec.Triggers {
+		perTriggerLogger := logger.WithValues("triggerIndex", i)
 		factory := func() (scalers.Scaler, *scalersconfig.ScalerConfig, error) {
 			var authParams map[string]string
 			if trigger.AuthenticationRef != nil {
 				var err error
-				authParams, err = sb.authResolver.ResolveAuthRef(ctx, triggerAuths, trigger.AuthenticationRef.Name)
-
+				authParams, err = bf.authResolver.ResolveAuthRef(ctx, triggerAuths, trigger.AuthenticationRef.Name)
 				if err != nil {
-					return nil, nil, fmt.Errorf("failed to resolve auth params for trigger `%s`: %w", trigger.Name, err)
+					return nil, nil, fmt.Errorf("failed to resolve auth params for triggerIndex=%d: %w", i, err)
 				}
 			}
 
@@ -73,7 +73,7 @@ func (sb *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1
 				TriggerUseCachedMetrics: trigger.UseCachedMetrics,
 				ResolvedEnv:             make(map[string]string),
 				AuthParams:              authParams,
-				GlobalHTTPTimeout:       sb.globalHTTPTimeout,
+				GlobalHTTPTimeout:       bf.globalHTTPTimeout,
 				TriggerIndex:            i,
 				MetricType:              trigger.MetricType,
 				AsMetricSource:          asMetricSource,
@@ -84,22 +84,23 @@ func (sb *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1
 			scaler, err := buildScaler(ctx, trigger.Type, config)
 
 			if err != nil {
-				logger.Error(err, "Error building scaler", "triggerIndex", i)
 				if scaler != nil {
 					if closeErr := scaler.Close(ctx); closeErr != nil {
-						logger.Error(closeErr, "Failed to close scaler")
+						perTriggerLogger.Error(closeErr, "Failed to close scaler")
 					}
 				}
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("failed to create scaler for triggerIndex=%d: %w", i, err)
 			}
 
-			return scaler, config, err
+			return scaler, config, nil
 		}
 
 		scaler, config, err := factory()
 
-		if err == nil {
-			result = append(result, cache.ScalerBuilder{
+		if err != nil {
+			logger.Error(err, "Failure while building scalers")
+		} else {
+			builders = append(builders, cache.ScalerBuilder{
 				Scaler:       scaler,
 				ScalerConfig: *config,
 				Factory:      factory,
@@ -107,7 +108,12 @@ func (sb *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1
 		}
 	}
 
-	return result, nil
+	// builders will be empty if we failed to create any scalers
+	if len(builders) == 0 {
+		return builders, fmt.Errorf("failed to create any scalers for scaledObject")
+	}
+
+	return builders, nil
 }
 
 // buildScaler builds a scaler form input config and trigger type

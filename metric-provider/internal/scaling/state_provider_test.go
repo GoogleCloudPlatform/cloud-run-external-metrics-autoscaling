@@ -90,6 +90,9 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 	scaledObject := &kedav1alpha1.ScaledObject{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-so", Namespace: "test-ns"},
 		Spec: kedav1alpha1.ScaledObjectSpec{
+			ScaleTargetRef: &kedav1alpha1.ScaleTarget{
+				Name: "test-deployment",
+			},
 			Triggers: []kedav1alpha1.ScaleTriggers{
 				{Type: "type1"},
 				{Type: "type2"},
@@ -118,7 +121,7 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 			builders: []cache.ScalerBuilder{
 				{
 					Scaler:       &mockScaler{isActive: true, metrics: []external_metrics.ExternalMetricValue{metric1}},
-					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1"},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1", TriggerIndex: 0},
 				},
 			},
 			expectedIsActive: true,
@@ -140,7 +143,7 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 			builders: []cache.ScalerBuilder{
 				{
 					Scaler:       &mockScaler{isActive: false, metrics: []external_metrics.ExternalMetricValue{metric1}},
-					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1"},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1", TriggerIndex: 0},
 				},
 			},
 			expectedIsActive: false,
@@ -160,7 +163,10 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 		{
 			name: "one scaler with error",
 			builders: []cache.ScalerBuilder{
-				{Scaler: &mockScaler{err: errors.New("scaler error")}},
+				{
+					Scaler:       &mockScaler{err: errors.New("scaler error")},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerIndex: 0},
+				},
 			},
 			expectedIsActive:        false,
 			expectedMetricAndTarget: []MetricAndTargetValue{},
@@ -171,11 +177,11 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 			builders: []cache.ScalerBuilder{
 				{
 					Scaler:       &mockScaler{isActive: false, metrics: []external_metrics.ExternalMetricValue{metric1}},
-					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1"},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1", TriggerIndex: 0},
 				},
 				{
 					Scaler:       &mockScaler{isActive: true, metrics: []external_metrics.ExternalMetricValue{metric2}},
-					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger2"},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger2", TriggerIndex: 1},
 				},
 			},
 			expectedIsActive: true,
@@ -206,9 +212,12 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 			builders: []cache.ScalerBuilder{
 				{
 					Scaler:       &mockScaler{isActive: true, metrics: []external_metrics.ExternalMetricValue{metric1}},
-					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1"},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1", TriggerIndex: 0},
 				},
-				{Scaler: &mockScaler{err: errors.New("scaler error")}},
+				{
+					Scaler:       &mockScaler{err: errors.New("scaler error")},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerIndex: 1},
+				},
 			},
 			expectedIsActive: true,
 			expectedMetricAndTarget: []MetricAndTargetValue{
@@ -222,18 +231,17 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 					},
 				},
 			},
-			expectedError: true,
-		},
+			expectedError: false},
 		{
 			name: "multiple scalers, all inactive",
 			builders: []cache.ScalerBuilder{
 				{
 					Scaler:       &mockScaler{isActive: false, metrics: []external_metrics.ExternalMetricValue{metric1}},
-					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1"},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1", TriggerIndex: 0},
 				},
 				{
 					Scaler:       &mockScaler{isActive: false, metrics: []external_metrics.ExternalMetricValue{metric2}},
-					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger2"},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger2", TriggerIndex: 1},
 				},
 			},
 			expectedIsActive: false,
@@ -262,8 +270,14 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 		{
 			name: "multiple scalers, multiple errors",
 			builders: []cache.ScalerBuilder{
-				{Scaler: &mockScaler{err: errors.New("scaler error 1")}},
-				{Scaler: &mockScaler{err: errors.New("scaler error 2")}},
+				{
+					Scaler:       &mockScaler{err: errors.New("scaler error 1")},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerIndex: 0},
+				},
+				{
+					Scaler:       &mockScaler{err: errors.New("scaler error 2")},
+					ScalerConfig: scalersconfig.ScalerConfig{TriggerIndex: 1},
+				},
 			},
 			expectedIsActive:        false,
 			expectedMetricAndTarget: []MetricAndTargetValue{},

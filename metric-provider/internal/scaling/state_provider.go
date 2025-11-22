@@ -36,16 +36,22 @@ type StateProvider struct {
 // A scaled object's state according to the state of all its scalers
 type ScaledObjectState struct {
 	MetricAndTargetValues []MetricAndTargetValue
-	IsActive              bool
+	IsActive              bool // True if any scalers are active
 }
 
-// Each scaler corresponds to a metric source
+// A scalerState corresponds to a single metric source
 type scalerState struct {
 	// We assume that each scaler only produces one metric value.
 	// TOOD: Handle multiple metric values from for Solace and External scalers.
 	metricAndTargetValue MetricAndTargetValue
 	isActive             bool
-	err                  error
+}
+
+// Wrap state and error in a single struct for channel compatibility
+type scalerChanResult struct {
+	triggerIndex int
+	scalerState  scalerState
+	err          error
 }
 
 type MetricAndTargetValue struct {
@@ -59,19 +65,23 @@ func NewStateProvider(logger *logr.Logger) *StateProvider {
 	return &StateProvider{logger: logger}
 }
 
+// GetScaledObjectState returns the state for the scaledObject
+// Returns an error if unable to retrieve metrics from any of the configured metric sources
 func (sp *StateProvider) GetScaledObjectState(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, scalerBuilders []cache.ScalerBuilder) (ScaledObjectState, error) {
-	logger := sp.logger.WithValues("scaledObject.Name", scaledObject.Name)
+	logger := sp.logger.WithValues("scaleTargetRef", scaledObject.Spec.ScaleTargetRef.Name)
 
-	resultsChan := make(chan scalerState, len(scalerBuilders))
+	resultsChan := make(chan scalerChanResult, len(scalerBuilders))
 	var wg sync.WaitGroup
 
-	for i, builder := range scalerBuilders {
+	for _, builder := range scalerBuilders {
 		wg.Add(1)
-		go func(builder cache.ScalerBuilder, triggerType string) {
+		go func(builder cache.ScalerBuilder) {
 			defer wg.Done()
-			scalerLogger := logger.WithValues("scaler", fmt.Sprintf("%T", builder.Scaler))
-			resultsChan <- getScalerState(ctx, builder.Scaler, builder.ScalerConfig, triggerType, scalerLogger)
-		}(builder, scaledObject.Spec.Triggers[i].Type)
+			triggerIndex := builder.ScalerConfig.TriggerIndex
+			triggerType := scaledObject.Spec.Triggers[triggerIndex].Type
+			scalerLogger := logger.WithValues("triggerIndex", triggerIndex)
+			resultsChan <- getScalerState(ctx, builder.Scaler, builder.ScalerConfig, triggerType, triggerIndex, scalerLogger)
+		}(builder)
 	}
 
 	go func() {
@@ -80,36 +90,35 @@ func (sp *StateProvider) GetScaledObjectState(ctx context.Context, scaledObject 
 	}()
 
 	isAnyScalerActive := false
-	var allMetricAndTargetValues []MetricAndTargetValue
-	var scalerErrors []string
+	var metricAndTargetValues []MetricAndTargetValue
 
 	for result := range resultsChan {
 		if result.err != nil {
-			scalerErrors = append(scalerErrors, result.err.Error())
+			logger.Error(result.err, "failed to read metrics", "triggerIndex", result.triggerIndex)
+			continue
 		} else {
-			allMetricAndTargetValues = append(allMetricAndTargetValues, result.metricAndTargetValue)
-		}
-
-		if result.isActive {
-			isAnyScalerActive = true
+			scalerState := result.scalerState
+			metricAndTargetValues = append(metricAndTargetValues, scalerState.metricAndTargetValue)
+			if scalerState.isActive {
+				isAnyScalerActive = true
+			}
 		}
 	}
 
-	var consolidatedError error
-	if len(scalerErrors) > 0 {
-		consolidatedError = fmt.Errorf("encountered %d error(s) while getting metrics: %s", len(scalerErrors), strings.Join(scalerErrors, "; "))
+	if len(metricAndTargetValues) == 0 {
+		return ScaledObjectState{}, fmt.Errorf("failed to retrieve any metrics for scaling")
 	}
 
 	state := ScaledObjectState{
-		MetricAndTargetValues: allMetricAndTargetValues,
+		MetricAndTargetValues: metricAndTargetValues,
 		IsActive:              isAnyScalerActive,
 	}
 
-	return state, consolidatedError
+	return state, nil
 }
 
 // TODO: Update to handle https://keda.sh/docs/2.18/concepts/scaling-deployments/#scaling-modifiers
-func getScalerState(ctx context.Context, scaler scalers.Scaler, config scalersconfig.ScalerConfig, triggerType string, logger logr.Logger) scalerState {
+func getScalerState(ctx context.Context, scaler scalers.Scaler, config scalersconfig.ScalerConfig, triggerType string, triggerIndex int, logger logr.Logger) scalerChanResult {
 	triggerName := strings.Replace(fmt.Sprintf("%T", scaler), "*scalers.", "", 1)
 	if config.TriggerName != "" {
 		triggerName = config.TriggerName
@@ -119,7 +128,7 @@ func getScalerState(ctx context.Context, scaler scalers.Scaler, config scalersco
 
 	metricSpecs := scaler.GetMetricSpecForScaling(ctx)
 	if len(metricSpecs) == 0 {
-		return scalerState{isActive: false}
+		return scalerChanResult{}
 	}
 
 	if len(metricSpecs) > 1 {
@@ -127,29 +136,45 @@ func getScalerState(ctx context.Context, scaler scalers.Scaler, config scalersco
 	}
 
 	spec := metricSpecs[0]
-	metricName := "unused"
+	metricName := "unused" // KEDA only uses this to include in the return value to K8s
 	metrics, isActive, err := scaler.GetMetricsAndActivity(ctx, metricName)
 	metricAndTargetValue := MetricAndTargetValue{}
 	if err != nil {
-		logger.Error(err, "error reading metrics")
-		scalerErr = err
+		scalerErr = fmt.Errorf("failed to get metrics and activity from scaler: %w", err)
 	} else {
 		if len(metrics) > 1 {
 			logger.Info("Scaler returned multiple metrics but only one is expected.")
 		}
 		metric := metrics[0]
+		metricValue := metric.Value.AsApproximateFloat64()
 		metricAndTargetValue = MetricAndTargetValue{
 			TriggerName: triggerName,
 			TriggerType: triggerType,
-			MetricValue: float64(metric.Value.Value()),
+			MetricValue: metricValue,
 			TargetValue: spec.External.Target,
 		}
 
+		targetValue := 0.0
+		switch spec.External.Target.Type {
+		case v2.AverageValueMetricType:
+			targetValue = spec.External.Target.AverageValue.AsApproximateFloat64()
+		case v2.ValueMetricType:
+			targetValue = spec.External.Target.Value.AsApproximateFloat64()
+		default:
+			scalerErr = fmt.Errorf("unsupported target type %s", spec.External.Target.Type)
+		}
+
+		if scalerErr == nil {
+			logger.Info("Successfully fetched metric and target values", "metric", metricValue, spec.External.Target.Type, targetValue)
+		}
 	}
 
-	return scalerState{
-		isActive:             isActive,
-		metricAndTargetValue: metricAndTargetValue,
-		err:                  scalerErr,
+	return scalerChanResult{
+		triggerIndex: triggerIndex,
+		scalerState: scalerState{
+			isActive:             isActive,
+			metricAndTargetValue: metricAndTargetValue,
+		},
+		err: scalerErr,
 	}
 }

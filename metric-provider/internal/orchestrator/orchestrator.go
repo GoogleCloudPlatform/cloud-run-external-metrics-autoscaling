@@ -75,18 +75,19 @@ func (o *Orchestrator) RefreshMetrics(ctx context.Context) {
 	var scaledObjectMetrics []*pb.ScaledObjectMetrics
 
 	for _, kedaScaledObject := range kedaScaledObjects {
+		logger := o.logger.WithValues("scaleTargetName", kedaScaledObject.Spec.ScaleTargetRef.Name)
 		builders, err := o.builderFactory.MakeBuilders(ctx, &kedaScaledObject, triggerAuthentications /*asMetricSource=*/, true)
+
 		if err != nil {
-			o.logger.Error(err, "Failed to make builders for scaled object", "scaleTargetName", kedaScaledObject.Name)
+			logger.Error(err, "Unable to refresh metrics")
 			continue
 		}
 
 		scaledObjectState, err := o.stateProvider.GetScaledObjectState(ctx, &kedaScaledObject, builders)
 		if err != nil {
-			o.logger.Error(err, "Failed to get scaled object state", "scaleTargetName", kedaScaledObject.Name)
+			o.logger.Error(err, "Unable to refresh metrics")
 			continue
 		}
-		o.logger.Info("Successfully fetched scaled object metrics", "scaleTargetName", kedaScaledObject.Name, "scaledObjectState", scaledObjectState)
 
 		scaledObjectMetrics = append(scaledObjectMetrics, &pb.ScaledObjectMetrics{
 			ScaledObject: scaling.ToPbScaledObject(kedaScaledObject.Spec),
@@ -105,6 +106,8 @@ func (o *Orchestrator) RefreshMetrics(ctx context.Context) {
 		} else {
 			o.logger.Info("Received scale response", "response", response)
 		}
+	} else {
+		o.logger.Info("No objects to scale; skipping scale request")
 	}
 }
 

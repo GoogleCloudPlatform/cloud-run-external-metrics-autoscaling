@@ -44,6 +44,9 @@ func TestBuilderFactory_MakeBuilders(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: kedav1alpha1.ScaledObjectSpec{
+				ScaleTargetRef: &kedav1alpha1.ScaleTarget{
+					Name: "test-deployment",
+				},
 				Triggers: []kedav1alpha1.ScaleTriggers{
 					{
 						Type: "external",
@@ -77,6 +80,9 @@ func TestBuilderFactory_MakeBuilders(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: kedav1alpha1.ScaledObjectSpec{
+				ScaleTargetRef: &kedav1alpha1.ScaleTarget{
+					Name: "test-deployment",
+				},
 				Triggers: []kedav1alpha1.ScaleTriggers{
 					{
 						Type: "unknown-scaler",
@@ -86,7 +92,7 @@ func TestBuilderFactory_MakeBuilders(t *testing.T) {
 		}
 
 		builders, err := factory.MakeBuilders(context.Background(), scaledObjectWithUnknownScaler, nil, false)
-		assert.NoError(t, err)
+		assert.Error(t, err)
 		assert.NotNil(t, builders)
 		assert.Len(t, builders, 0)
 	})
@@ -107,6 +113,9 @@ func TestBuilderFactory_MakeBuilders(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: kedav1alpha1.ScaledObjectSpec{
+				ScaleTargetRef: &kedav1alpha1.ScaleTarget{
+					Name: "test-deployment",
+				},
 				Triggers: []kedav1alpha1.ScaleTriggers{
 					{
 						Type: "external",

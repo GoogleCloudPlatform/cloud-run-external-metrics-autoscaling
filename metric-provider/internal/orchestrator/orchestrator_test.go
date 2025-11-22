@@ -379,7 +379,7 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 		scaledObjectState := &scaling.ScaledObjectState{
 			MetricAndTargetValues: []scaling.MetricAndTargetValue{
 				{
-					MetricValue: 10.0,					TargetValue: v2.MetricTarget{
+					MetricValue: 10.0, TargetValue: v2.MetricTarget{
 						Type:         v2.AverageValueMetricType,
 						AverageValue: resource.NewQuantity(15, resource.DecimalSI),
 					},
