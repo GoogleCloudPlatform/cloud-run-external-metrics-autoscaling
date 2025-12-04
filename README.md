@@ -164,19 +164,30 @@ gcloud beta run deploy $SERVICE_NAME \
   --no-cpu-throttling \
   --base-image=us-central1-docker.pkg.dev/serverless-runtimes/google-22/runtimes/java21 \
   --labels=created-by=crema \
-  --set-env-vars="CREMA_CONFIG=${CREMA_CONFIG_PARAM_VERSION},OUTPUT_SCALER_METRICS=True"
+  --set-env-vars="CREMA_CONFIG=${CREMA_CONFIG_PARAM_VERSION},OUTPUT_SCALER_METRICS=False,ENABLE_CLOUD_LOGGING=False"
 ```
 
 The following environment variables are checked by the container:
 - `CREMA_CONFIG`: Required. The fully qualified name (FQN) of the parameter version which contains your CREMA config.
 - `OUTPUT_SCALER_METRICS`: Optional. If true, CREMA will emit metrics to Cloud Monitoring.
+- `ENABLE_CLOUD_LOGGING`: Optional. If true, CREMA will log errors to Cloud Logging for improved log searchability.
 
-Note: If you set the `OUTPUT_SCALER_METRICS=True` environment variable, you'll also have to grant your CREMA service account permission to write metrics:
+Note: The `OUTPUT_SCALER_METRICS` and `ENABLE_CLOUD_LOGGING` flags are disabled by default as these may incur additional costs. See [Cloud Observability Pricing](https://cloud.google.com/products/observability/pricing) for details.
+
+If you set the `OUTPUT_SCALER_METRICS=True` environment variable, you'll also have to grant your CREMA service account permission to write metrics:
 
 ```bash
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/monitoring.metricWriter"
+```
+
+If you set the `ENABLE_CLOUD_LOGGING=True` environment variable, you'll also have to grant your CREMA service account permission to write log entries:
+
+```bash
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/logging.logWriter"
 ```
 
 ## Verify

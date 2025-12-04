@@ -15,6 +15,11 @@
 package logging
 
 import (
+	"bytes"
+	"errors"
+	"io"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +100,52 @@ func TestWithName(t *testing.T) {
 				t.Errorf("WithName() prefix = %q, want %q", newSink.prefix, tt.expectedPrefix)
 			}
 		})
+	}
+}
+
+func TestInitilization(t *testing.T) {
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+	rOut, wOut, _ := os.Pipe()
+	rErr, wErr, _ := os.Pipe()
+	os.Stdout = wOut
+	os.Stderr = wErr
+
+	logger := NewLogger()
+	logger.Info("test info")
+	logger.Error(errors.New("test error"), "test error message")
+
+	wOut.Close()
+	wErr.Close()
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+
+	var bufOut bytes.Buffer
+	io.Copy(&bufOut, rOut)
+	rOut.Close()
+
+	var bufErr bytes.Buffer
+	io.Copy(&bufErr, rErr)
+	rErr.Close()
+
+	if !strings.Contains(bufOut.String(), "[INFO]") {
+		t.Errorf("Info log not found in stdout")
+	}
+
+	errOutput := bufErr.String()
+	clientError := "[ERROR] [METRIC-PROVIDER] Failed to initialize Google Cloud Logging client"
+	projectIdError := "[ERROR] [METRIC-PROVIDER] Failed to get project ID"
+	expectedErrorFromLogger := "[ERROR] [METRIC-PROVIDER] test error message: test error"
+
+	if strings.Contains(errOutput, clientError) || strings.Contains(errOutput, projectIdError) {
+		// Initialization failed, so the error from logger.Error should also be in stderr.
+		if !strings.Contains(errOutput, expectedErrorFromLogger) {
+			t.Errorf("Expected stderr to contain %q when initialization fails, but got %q", expectedErrorFromLogger, errOutput)
+		}
+	} else {
+		// Initialization succeeded. Verify no unexpected errors.
+		if !strings.Contains(errOutput, expectedErrorFromLogger) && len(errOutput) > 0 {
+			t.Errorf("Unexpected error output in stderr: %q", errOutput)
+		}
 	}
 }
