@@ -39,7 +39,7 @@ Follow the instructions below to build, configure, deploy, and verify your CREMA
 
 Create a GCP service account that will be used by the Cloud Run CREMA service. We'll grant this service account the necessary permissions throughout the setup. Those permissions will be:
 - `Parameter Manager Parameter Viewer` (`roles/parametermanager.parameterViewer`) to retrieve from Parameter Manager the CREMA configuration you'll be creating.
-- `Cloud Run Developer` (`roles/run.developer`) to set the number of instances in your scaled workloads.
+- `Cloud Run Developer` (`roles/run.developer`) and `Service Account User` (`roles/iam.serviceAccountUser`) to set the number of instances in your scaled workloads.
 
 ```bash
 PROJECT_ID=my-project
@@ -132,6 +132,16 @@ gcloud alpha run worker-pools add-iam-policy-binding $WORKER_POOL_NAME \
   --region=$WORKER_POOL_REGION \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/run.developer"
+```
+
+Grant your CREMA service account `roles/iam.serviceAccountUser` on the service accounts which run the services and worker pools to be scaled:
+
+```bash
+CONSUMER_SERVICE_ACCOUNT_NAME=my-worker-pool-sa
+gcloud iam service-accounts add-iam-policy-binding \
+    $CONSUMER_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com \
+    --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/iam.serviceAccountUser"
 ```
 
 ## Deploy
