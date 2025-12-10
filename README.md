@@ -39,7 +39,6 @@ Follow the instructions below to build, configure, deploy, and verify your CREMA
 
 Create a GCP service account that will be used by the Cloud Run CREMA service. We'll grant this service account the necessary permissions throughout the setup. Those permissions will be:
 - `Parameter Manager Parameter Viewer` (`roles/parametermanager.parameterViewer`) to retrieve from Parameter Manager the CREMA configuration you'll be creating.
-- `Artifact Registry Reader` (`roles/artifactregistry.reader`) to access the container images.
 - `Cloud Run Developer` (`roles/run.developer`) to set the number of instances in your scaled workloads.
 
 ```bash
@@ -105,37 +104,34 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
   --role="roles/parametermanager.parameterViewer"
 ```
 
-Grant your CREMA service account permission to scale the services and worker pools specified in your configuration.
+Grant your CREMA service account permission to scale the services and worker pools that you've specified in your CREMA configuration. This can be done by granting `roles/run.developer` at the project level or for each individual instance service or worker pool to be scaled.
 
-Both of the following steps must be completed **for each service and worker pool that your CREMA service scales**.
+Granting the required permissions at the project level will enable CREMA to scale any services or worker pools that you specify in the configuration--you'll be able to add more services/worker pools in the future without having to further modify permissions. To grant these permissions at the project level:
 
-1. Grant the CREMA service account the `Cloud Run Developer` role on the service / worker pool:
 ```bash
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/run.developer"
+```
+
+Alternatively, granting the required permissions for each individual service or worker pool minimizes the permissions to strictly what's necessary and is considered a security best practice. To grant these permissions for each individual service or worker pool:
+
+```bash
+# For a service
 SERVICE_NAME=my-service-to-be-scaled
 SERVICE_REGION=us-central1
 gcloud run services add-iam-policy-binding $SERVICE_NAME \
   --region=$SERVICE_REGION \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/run.developer"
-```
 
-*or*
-
-```bash
+# For a worker pool
 WORKER_POOL_NAME=my-worker-pool-to-be-scaled
 WORKER_POOL_REGION=us-central1
 gcloud alpha run worker-pools add-iam-policy-binding $WORKER_POOL_NAME \
   --region=$WORKER_POOL_REGION \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/run.developer"
-```
-
-2. Grant the CREMA service account the `Artifact Registry Reader` role on the artifacts that are deployed by the service / worker pool:
-```bash
-SERVICE_AR_REPO=my-service-to-be-scaled-repo
-gcloud artifacts repositories add-iam-policy-binding $SERVICE_AR_REPO \
-  --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/artifactregistry.reader"
 ```
 
 ## Deploy
