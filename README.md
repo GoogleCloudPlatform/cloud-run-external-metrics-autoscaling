@@ -11,12 +11,11 @@ This project currently depends on **KEDA v2.17**. The included table lists vario
 | Scalers                                                                                   | Cloud Run Compatible |
 |:------------------------------------------------------------------------------------------|:---------------------|
 | [Apache Kafka](https://keda.sh/docs/2.17/scalers/apache-kafka/)                           | Verified             |
-| [CPU](https://keda.sh/docs/2.17/scalers/cpu/)                                             | Incompatible         |
 | [Cron](https://keda.sh/docs/2.17/scalers/cron/)                                           | Verified             |
 | [Github Runner Scaler](https://keda.sh/docs/2.17/scalers/github-runner/)                  | Verified             |
+| [CPU](https://keda.sh/docs/2.17/scalers/cpu/)                                             | Incompatible         |
 | [Kubernetes Workload](https://keda.sh/docs/2.17/scalers/kubernetes-workload/)             | Incompatible         |
 | [Memory](https://keda.sh/docs/2.17/scalers/memory/)                                       | Incompatible         |
-| [Redis Lists](https://keda.sh/docs/2.17/scalers/redis-lists/)                             | Verified             |
 
 See https://keda.sh/docs/2.17/scalers/ for the full list of KEDA's scalers. The compatibility for any KEDA scaler not listed above is currently unknown. Please file an issue if you believe a scaler does not work.
 
