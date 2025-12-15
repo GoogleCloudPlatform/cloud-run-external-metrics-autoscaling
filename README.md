@@ -19,7 +19,7 @@ See https://keda.sh/docs/2.17/scalers/ for the full list of KEDA's scalers. The 
 
 # Setup
 
-Follow the instructions below to build, configure, deploy, and verify your CREMA service.
+Follow the instructions below to configure, deploy, and verify your CREMA service.
 
 ## Prerequisites
 
@@ -49,28 +49,6 @@ gcloud iam service-accounts create $CREMA_SERVICE_ACCOUNT_NAME \
   --display-name="CREMA Service Account"
 ```
 
-## Build
-
-Follow the steps below to build the CREMA service and make the resulting container image available in Artifact Registry.
-
-Create an Artifact Registry repository to store the CREMA container image if you don't already have one:
-
-```bash
-PROJECT_ID=my-project
-CREMA_REPO_NAME=crema
-AR_REGION=us-central1
-
-gcloud artifacts repositories create "${CREMA_REPO_NAME}" --repository-format=docker --location=$AR_REGION --description="Docker repository for CREMA images"
-```
-
-Use Google Cloud Build and the included `Dockerfile` to build the container image and push it to Artifact Registry. Run the following command from the root of this project:
-
-```bash
-gcloud builds submit --tag $AR_REGION-docker.pkg.dev/$PROJECT_ID/$CREMA_REPO_NAME/crema:latest .
-```
-
-Note that this build process may take 30+ minutes.
-
 ## Configure
 
 Follow the steps below to create a yaml configuration file for CREMA in [Parameter Manager](https://docs.cloud.google.com/secret-manager/parameter-manager).
@@ -88,6 +66,8 @@ Upload your local YAML file as a new parameter version:
 
 ```bash
 LOCAL_YAML_CONFIG_FILE=./my-crema-config.yaml
+PARAMETER_ID=crema-config
+PARAMETER_REGION=global
 PARAMETER_VERSION=1
 
 gcloud parametermanager parameters versions create $PARAMETER_VERSION \
@@ -99,6 +79,9 @@ gcloud parametermanager parameters versions create $PARAMETER_VERSION \
 Grant your CREMA service account permission to read from Parameter Manager:
 
 ```bash
+PROJECT_ID=my-project
+CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
+
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/parametermanager.parameterViewer"
@@ -109,6 +92,9 @@ Grant your CREMA service account permission to scale the services and worker poo
 Granting the required permissions at the project level will enable CREMA to scale any services or worker pools that you specify in the configuration--you'll be able to add more services/worker pools in the future without having to further modify permissions. To grant these permissions at the project level:
 
 ```bash
+PROJECT_ID=my-project
+CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
+
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/run.developer"
@@ -118,16 +104,23 @@ Alternatively, granting the required permissions for each individual service or 
 
 ```bash
 # For a service
+PROJECT_ID=my-project
 SERVICE_NAME=my-service-to-be-scaled
 SERVICE_REGION=us-central1
+CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
+
+
 gcloud run services add-iam-policy-binding $SERVICE_NAME \
   --region=$SERVICE_REGION \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/run.developer"
 
 # For a worker pool
+PROJECT_ID=my-project
 WORKER_POOL_NAME=my-worker-pool-to-be-scaled
 WORKER_POOL_REGION=us-central1
+CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
+
 gcloud alpha run worker-pools add-iam-policy-binding $WORKER_POOL_NAME \
   --region=$WORKER_POOL_REGION \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
@@ -137,7 +130,10 @@ gcloud alpha run worker-pools add-iam-policy-binding $WORKER_POOL_NAME \
 Grant your CREMA service account `roles/iam.serviceAccountUser` on the service accounts which run the services and worker pools to be scaled:
 
 ```bash
+PROJECT_ID=my-project
 CONSUMER_SERVICE_ACCOUNT_NAME=my-worker-pool-sa
+CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
+
 gcloud iam service-accounts add-iam-policy-binding \
     $CONSUMER_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com \
     --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
@@ -146,9 +142,13 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 ## Deploy
 
-Deploy a CREMA service using the built image with the following `gcloud` command.
+Deploy your CREMA service using either
+- our pre-built container image in `us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler`
+- or a container image you build yourself from the source code using Cloud Build (see [instructions](#optional-build-the-container-image-from-source) below).
 
-Configure and run the following command:
+The command here deploys the service using the pre-built container image; if you want to deploy your own built container image, update the IMAGE variable to specify it.
+
+Configure the variables and the command deploy command:
 - `SERVICE_NAME`: The name for your CREMA service
 - `SERVICE_REGION`: The region to run your CREMA service in.
 - `CREMA_SERVICE_ACCOUNT_NAME`: The name of the service account which will run CREMA
@@ -158,9 +158,10 @@ Configure and run the following command:
 SERVICE_NAME=my-crema-service
 SERVICE_REGION=us-central1
 CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
+PARAMETER_VERSION=1
 
 CREMA_CONFIG_PARAM_VERSION=projects/$PROJECT_ID/locations/$PARAMETER_REGION/parameters/$PARAMETER_ID/versions/$PARAMETER_VERSION
-IMAGE=$AR_REGION-docker.pkg.dev/$PROJECT_ID/$CREMA_REPO_NAME/crema:latest
+IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.0
 
 gcloud beta run deploy $SERVICE_NAME \
   --image=${IMAGE} \
@@ -183,6 +184,9 @@ Note: The `OUTPUT_SCALER_METRICS` and `ENABLE_CLOUD_LOGGING` flags are disabled 
 If you set the `OUTPUT_SCALER_METRICS=True` environment variable, you'll also have to grant your CREMA service account permission to write metrics:
 
 ```bash
+PROJECT_ID=my-project
+CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
+
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/monitoring.metricWriter"
@@ -191,6 +195,9 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 If you set the `ENABLE_CLOUD_LOGGING=True` environment variable, you'll also have to grant your CREMA service account permission to write log entries:
 
 ```bash
+PROJECT_ID=my-project
+CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
+
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/logging.logWriter"
@@ -214,6 +221,32 @@ Each log message is labeled with the component that emitted it.
 ```
 
 TIP: Use the following Cloud Logging query for filtering the CREMA service's logs: `"[SCALER]" OR "[METRIC-PROVIDER]"`
+
+## Optional: Build the container image from source
+
+Follow the steps below to build CREMA and make the resulting container image available in Artifact Registry.
+
+Create an Artifact Registry repository to store the CREMA container image if you don't already have one:
+
+```bash
+PROJECT_ID=my-project
+CREMA_REPO_NAME=crema
+AR_REGION=us-central1
+
+gcloud artifacts repositories create "${CREMA_REPO_NAME}" --repository-format=docker --location=$AR_REGION --description="Docker repository for CREMA images"
+```
+
+Use Google Cloud Build and the included `Dockerfile` to build the container image and push it to Artifact Registry. Run the following command from the root of this project:
+
+```bash
+PROJECT_ID=my-project
+CREMA_REPO_NAME=crema
+AR_REGION=us-central1
+
+gcloud builds submit --tag $AR_REGION-docker.pkg.dev/$PROJECT_ID/$CREMA_REPO_NAME/crema:latest .
+```
+
+Note that this build process may take 30+ minutes.
 
 ### Metrics
 If configured, CREMA will emit the following metrics:
