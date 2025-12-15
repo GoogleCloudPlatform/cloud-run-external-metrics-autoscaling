@@ -255,3 +255,10 @@ If configured, CREMA will emit the following metrics:
 - `custom.googleapis.com/$TRIGGER_TYPE/metric_value`: The metric value it received, per trigger type
 - `custom.googleapis.com/recommended_instance_count`: The number of instances recommended, per Cloud Run scaled object
 - `custom.googleapis.com/requested_instance_count`: The number of instances requested, per Cloud Run scaled object
+
+## Known Issues
+### CREMA does not currently resolve environment variables
+As a result, KEDA configuration fields which rely on environment variables, i.e. those with a `FromEnv` suffix such as `usernameFromEnv` `passwordFromEnv` from KEDA's [Redis  scaler](https://keda.sh/docs/2.17/scalers/redis-lists/), are not supported.
+
+### Slow metrics in Cloud Monitoring
+Many Google Cloud Monitoring metrics have [2+ minute ingestion delay](https://docs.cloud.google.com/monitoring/api/v3/latency-n-retention#latency) which may affect scaling responsiveness for Google Cloud Platform scalers. See the [Google Cloud metrics list](https://docs.cloud.google.com/monitoring/api/metrics_gcp) for the underlying metrics used by the scaler for latency details.
