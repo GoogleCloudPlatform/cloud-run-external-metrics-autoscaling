@@ -257,8 +257,8 @@ If configured, CREMA will emit the following metrics:
 - `custom.googleapis.com/requested_instance_count`: The number of instances requested, per Cloud Run scaled object
 
 ## Known Issues
-### CREMA does not currently resolve environment variables
-As a result, KEDA configuration fields which rely on environment variables, i.e. those with a `FromEnv` suffix such as `usernameFromEnv` `passwordFromEnv` from KEDA's [Redis  scaler](https://keda.sh/docs/2.17/scalers/redis-lists/), are not supported.
+*   **CREMA does not currently resolve environment variables:** As a result, KEDA configuration fields which rely on environment variables, i.e. those with a `FromEnv` suffix such as `usernameFromEnv` `passwordFromEnv` from KEDA's [Redis  scaler](https://keda.sh/docs/2.17/scalers/redis-lists/), are not supported.
 
-### Slow metrics in Cloud Monitoring
-Many Google Cloud Monitoring metrics have [2+ minute ingestion delay](https://docs.cloud.google.com/monitoring/api/v3/latency-n-retention#latency) which may affect scaling responsiveness for Google Cloud Platform scalers. See the [Google Cloud metrics list](https://docs.cloud.google.com/monitoring/api/metrics_gcp) for the underlying metrics used by the scaler for latency details.
+*   **Slow metrics in Cloud Monitoring:** Many Google Cloud Monitoring metrics have [2+ minute ingestion delay](https://docs.cloud.google.com/monitoring/api/v3/latency-n-retention#latency) which may affect scaling responsiveness for Google Cloud Platform scalers. See the [Google Cloud metrics list](https://docs.cloud.google.com/monitoring/api/metrics_gcp) for the underlying metrics used by the scaler for latency details.
+
+*   **A given Cloud Run service or worker pool should only be scaled by a single CREMA deployment:** Scaling the same service or worker pool from multiple CREMA deployments can lead to race conditions and unexpected scaling behavior.
