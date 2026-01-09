@@ -21,7 +21,7 @@ See https://keda.sh/docs/2.17/scalers/ for the full list of KEDA's scalers. The 
 
 # Setup
 
-Follow the instructions below to configure, deploy, and verify your CREMA service.
+Follow the instructions below to configure and deploy CREMA as a Cloud Run worker pool to scale your Cloud Run workloads on metrics external to Cloud Run.
 
 ## Prerequisites
 
@@ -39,7 +39,7 @@ Follow the instructions below to configure, deploy, and verify your CREMA servic
 
 ## Create a GCP Service Account
 
-Create a GCP service account that will be used by the Cloud Run CREMA service. We'll grant this service account the necessary permissions throughout the setup. Those permissions will be:
+Create a GCP service account that will be used by the Cloud Run CREMA worker pool. We'll grant this service account the necessary permissions throughout the setup. Those permissions will be:
 - `Parameter Manager Parameter Viewer` (`roles/parametermanager.parameterViewer`) to retrieve from Parameter Manager the CREMA configuration you'll be creating.
 - `Cloud Run Developer` (`roles/run.developer`) and `Service Account User` (`roles/iam.serviceAccountUser`) to set the number of instances in your scaled workloads.
 
@@ -55,7 +55,7 @@ gcloud iam service-accounts create $CREMA_SERVICE_ACCOUNT_NAME \
 
 Follow the steps below to create a yaml configuration file for CREMA in [Parameter Manager](https://docs.cloud.google.com/secret-manager/parameter-manager).
 
-Create a Parameter in Parameter Manager to store your CREMA config. This parameter is where you will store Parameter Versions to be used by CREMA:
+Create a Parameter in Parameter Manager to store the configuration used by CREMA:
 ```bash
 PARAMETER_ID=crema-config
 PARAMETER_REGION=global
@@ -64,7 +64,7 @@ gcloud parametermanager parameters create $PARAMETER_ID --location=$PARAMETER_RE
 
 Locally, create a YAML file for your CREMA configuration. See the [Configuration README](metric-provider/api/README.md) for reference.
 
-Upload your local YAML file as a new parameter version:
+Upload your local YAML file to Parameter Manager as a new parameter version:
 
 ```bash
 LOCAL_YAML_CONFIG_FILE=./my-crema-config.yaml
@@ -78,7 +78,7 @@ gcloud parametermanager parameters versions create $PARAMETER_VERSION \
   --payload-data-from-file=$LOCAL_YAML_CONFIG_FILE
 ```
 
-Grant your CREMA service account permission to read from Parameter Manager:
+Grant your CREMA service account permission to read the parameter version from Parameter Manager:
 
 ```bash
 PROJECT_ID=my-project
@@ -89,9 +89,9 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
   --role="roles/parametermanager.parameterViewer"
 ```
 
-Grant your CREMA service account permission to scale the services and worker pools that you've specified in your CREMA configuration. This can be done by granting `roles/run.developer` at the project level or for each individual instance service or worker pool to be scaled.
+Grant your CREMA service account permission to scale the workloads that you've specified in your CREMA configuration. This can be done by granting `roles/run.developer` at the project level or for each individual service or worker pool to be scaled.
 
-Granting the required permissions at the project level will enable CREMA to scale any services or worker pools that you specify in the configuration--you'll be able to add more services/worker pools in the future without having to further modify permissions. To grant these permissions at the project level:
+Granting the required permissions at the project level will enable CREMA to scale any workloads that you specify in the configuration--you'll be able to add more workloads in the future without having to further modify permissions. To grant these permissions at the project level:
 
 ```bash
 PROJECT_ID=my-project
@@ -102,7 +102,7 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
   --role="roles/run.developer"
 ```
 
-Alternatively, granting the required permissions for each individual service or worker pool minimizes the permissions to strictly what's necessary and is considered a security best practice. To grant these permissions for each individual service or worker pool:
+Alternatively, you can grant the required permissions for each individual service or worker pool. This minimizes the permissions to strictly what's necessary and is considered a security best practice. To grant these permissions for each individual service or worker pool:
 
 ```bash
 # For a service
@@ -123,13 +123,13 @@ WORKER_POOL_NAME=my-worker-pool-to-be-scaled
 WORKER_POOL_REGION=us-central1
 CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
 
-gcloud alpha run worker-pools add-iam-policy-binding $WORKER_POOL_NAME \
+gcloud beta run worker-pools add-iam-policy-binding $WORKER_POOL_NAME \
   --region=$WORKER_POOL_REGION \
   --member="serviceAccount:$CREMA_SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/run.developer"
 ```
 
-Grant your CREMA service account `roles/iam.serviceAccountUser` on the service accounts which run the services and worker pools to be scaled:
+Grant your CREMA service account `roles/iam.serviceAccountUser` on the service accounts which run the Cloud Run workloads to be scaled:
 
 ```bash
 PROJECT_ID=my-project
@@ -144,33 +144,31 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 ## Deploy
 
-Deploy your CREMA service using either
+Deploy your CREMA worker pool using either
 - our pre-built container image in `us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler`
 - or a container image you build yourself from the source code using Cloud Build (see [instructions](#optional-build-the-container-image-from-source) below).
 
-The command here deploys the service using the pre-built container image; if you want to deploy your own built container image, update the IMAGE variable to specify it.
+The command here deploys CREMA as a Cloud Run worker pool using the pre-built container image; if you want to deploy your own built container image, update the IMAGE variable to specify it.
 
 Configure the variables and the command deploy command:
-- `SERVICE_NAME`: The name for your CREMA service
-- `SERVICE_REGION`: The region to run your CREMA service in.
+- `WORKER_POOL_NAME`: The name for your CREMA worker pool
+- `WORKER_POOL_REGION`: The region to run your CREMA worker pool in.
 - `CREMA_SERVICE_ACCOUNT_NAME`: The name of the service account which will run CREMA
 - `PARAMETER_VERSION`: The parameter version you created
 
 ```bash
-SERVICE_NAME=my-crema-service
-SERVICE_REGION=us-central1
+WORKER_POOL_NAME=my-crema-worker-pool
+WORKER_POOL_REGION=us-central1
 CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
 PARAMETER_VERSION=1
 
 CREMA_CONFIG_PARAM_VERSION=projects/$PROJECT_ID/locations/$PARAMETER_REGION/parameters/$PARAMETER_ID/versions/$PARAMETER_VERSION
 IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.0
 
-gcloud beta run deploy $SERVICE_NAME \
+gcloud beta run worker-pools deploy $WORKER_POOL_NAME \
   --image=${IMAGE} \
-  --region=${SERVICE_REGION} \
+  --region=${WORKER_POOL_REGION} \
   --service-account="${CREMA_SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --no-allow-unauthenticated \
-  --no-cpu-throttling \
   --base-image=us-central1-docker.pkg.dev/serverless-runtimes/google-22/runtimes/java21 \
   --labels=created-by=crema \
   --set-env-vars="CREMA_CONFIG=${CREMA_CONFIG_PARAM_VERSION},OUTPUT_SCALER_METRICS=False,ENABLE_CLOUD_LOGGING=False"
@@ -207,10 +205,10 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 
 ## Verify
 
-Use the resource below to verify that your CREMA service is running correctly.
+Use the resource below to verify that your CREMA worker pool is running correctly.
 
-### Service Logs
-When your CREMA service is running, you should see the following logs in your service's logs each time metrics are refreshed:
+### Cloud Logging Logs
+CREMA writes logs to Cloud Logging during each scaling cycle. You should see the following entries in your worker pool's logs in Cloud Logging each time metrics are refreshed:
 
 Each log message is labeled with the component that emitted it.
 ```
@@ -222,7 +220,7 @@ Each log message is labeled with the component that emitted it.
 [INFO] [SCALER] Recommended instances ...
 ```
 
-TIP: Use the following Cloud Logging query for filtering the CREMA service's logs: `"[SCALER]" OR "[METRIC-PROVIDER]"`
+TIP: Use the following Cloud Logging query for filtering the CREMA worker pool's logs: `"[SCALER]" OR "[METRIC-PROVIDER]"`
 
 ## Optional: Build the container image from source
 
