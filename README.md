@@ -3,7 +3,7 @@
 
 # Cloud Run External Metrics Autoscaling
 
-The Cloud Run External Metrics Autoscaling (CREMA) project leverages [KEDA](https://github.com/kedacore/keda) to provide autoscaling for Cloud Run services and worker pools.
+The Cloud Run External Metrics Autoscaling (CREMA) project leverages [KEDA](https://github.com/kedacore/keda) to provide autoscaling for Cloud Run services and worker pools. This guide will walk you through the deployment of Cloud Run's pre-built CREMA container image.
 
 # Compatibility
 This project currently depends on **KEDA v2.17**. The included table lists various KEDA scalers and their compatibility for use with Cloud Run.
@@ -144,9 +144,8 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 ## Deploy
 
-Deploy your CREMA worker pool using either
-- our pre-built container image in `us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler`
-- or a container image you build yourself from the source code using Cloud Build (see [instructions](#optional-build-the-container-image-from-source) below).
+We recommend deploying CREMA using Cloud Run's pre-built container image in `us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler`.
+However, you can optionally build the container image yourself from source code using Cloud Build (see [instructions](#optional-build-the-container-image-from-source) below), subject to a 30+ minute build process.
 
 The command here deploys CREMA as a Cloud Run worker pool using the pre-built container image; if you want to deploy your own built container image, update the IMAGE variable to specify it.
 
@@ -166,6 +165,7 @@ CREMA_CONFIG_PARAM_VERSION=projects/$PROJECT_ID/locations/$PARAMETER_REGION/para
 IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.0
 
 gcloud beta run worker-pools deploy $WORKER_POOL_NAME \
+  --scaling=1 \
   --image=${IMAGE} \
   --region=${WORKER_POOL_REGION} \
   --service-account="${CREMA_SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
@@ -223,7 +223,7 @@ TIP: Use the following Cloud Logging query for filtering the CREMA worker pool's
 
 ## Optional: Build the container image from source
 
-Follow the steps below to build CREMA and make the resulting container image available in Artifact Registry.
+Follow the steps below to build the CREMA container image yourself. The resulting container image will be pushed to Artifact Registry. Note that this build typically takes 30+ minutes.
 
 Create an Artifact Registry repository to store the CREMA container image if you don't already have one:
 
@@ -244,8 +244,6 @@ AR_REGION=us-central1
 
 gcloud builds submit --tag $AR_REGION-docker.pkg.dev/$PROJECT_ID/$CREMA_REPO_NAME/crema:latest .
 ```
-
-Note that this build process may take 30+ minutes.
 
 ### Metrics
 If configured, CREMA will emit the following metrics:
