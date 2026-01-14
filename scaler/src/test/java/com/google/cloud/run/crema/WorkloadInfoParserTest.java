@@ -53,8 +53,21 @@ public final class WorkloadInfoParserTest {
   }
 
   @Test
-  public void workloadParser_stringForWorkerPoolWorkload_parsesWorkerPoolInfo() {
+  public void workloadParser_stringForWorkerPoolWorkload_parsesWorkerPoolV1Format() {
     String input = "projects/my-project/locations/us-central1/workerpools/my-workerpool";
+
+    WorkloadInfoParser.WorkloadInfo workloadInfo = WorkloadInfoParser.parse(input);
+
+    assertThat(workloadInfo.workloadType()).isEqualTo(WorkloadInfoParser.WorkloadType.WORKERPOOL);
+    assertThat(workloadInfo.projectId()).isEqualTo("my-project");
+    assertThat(workloadInfo.location()).isEqualTo("us-central1");
+    assertThat(workloadInfo.name()).isEqualTo("my-workerpool");
+  }
+
+  @Test
+  public void workloadParser_stringForWorkerPoolWorkload_parsesWorkerPoolV2Format() {
+    // v2 format fqn, note the capital P in workerPools
+    String input = "projects/my-project/locations/us-central1/workerPools/my-workerpool";
 
     WorkloadInfoParser.WorkloadInfo workloadInfo = WorkloadInfoParser.parse(input);
 

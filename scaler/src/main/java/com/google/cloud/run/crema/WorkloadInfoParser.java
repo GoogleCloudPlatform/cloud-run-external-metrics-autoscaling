@@ -25,8 +25,10 @@ public class WorkloadInfoParser {
 
   private static final Pattern SERVICE_PATTERN =
       Pattern.compile("projects/([^/]+)/locations/([^/]+)/services/([^/]+)");
+
+  // `workerpools` and `workerPools` are both valid depending on Cloud Run API version
   private static final Pattern WORKERPOOL_PATTERN =
-      Pattern.compile("projects/([^/]+)/locations/([^/]+)/workerpools/([^/]+)");
+      Pattern.compile("projects/([^/]+)/locations/([^/]+)/worker[Pp]ools/([^/]+)");
 
   private WorkloadInfoParser() {}
 
