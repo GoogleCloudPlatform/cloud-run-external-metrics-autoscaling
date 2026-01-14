@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package configprovider
+package config
 
 import (
 	"context"
@@ -20,10 +20,10 @@ import (
 	"fmt"
 
 	parametermanagerpb "cloud.google.com/go/parametermanager/apiv1/parametermanagerpb"
-	"github.com/ghodss/yaml"
 	"github.com/go-logr/logr"
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -42,8 +42,8 @@ type ConfigProvider struct {
 	parameterVersionName string
 }
 
-// New creates a new ConfigurationProvider instance.
-func New(client ParameterManagerClient, parameterVersionName string, logger *logr.Logger) *ConfigProvider {
+// NewProvider creates a new ConfigurationProvider instance.
+func NewProvider(client ParameterManagerClient, parameterVersionName string, logger *logr.Logger) *ConfigProvider {
 	return &ConfigProvider{
 		client:               client,
 		logger:               logger,
@@ -69,12 +69,16 @@ func (cp *ConfigProvider) GetCremaConfig(ctx context.Context) (api.CremaConfig, 
 		return api.CremaConfig{}, err
 	}
 
+	if err := ValidateConfig(config); err != nil {
+		return api.CremaConfig{}, err
+	}
+
 	return applyDefaults(config), nil
 }
 
 func (cp *ConfigProvider) readParameterVersion(ctx context.Context, parameterVersionName string) (*parametermanagerpb.ParameterVersion, error) {
 	if cp == nil || cp.client == nil {
-		return nil, fmt.Errorf("ConfigProvider is not initialized; use New()")
+		return nil, fmt.Errorf("ConfigProvider is not initialized; use NewProvider()")
 	}
 
 	req := &parametermanagerpb.GetParameterVersionRequest{
@@ -86,9 +90,9 @@ func (cp *ConfigProvider) readParameterVersion(ctx context.Context, parameterVer
 
 func unmarshalCremaConfig(data []byte) (api.CremaConfig, error) {
 	var config api.CremaConfig
-	err := yaml.Unmarshal(data, &config)
+	err := yaml.UnmarshalStrict(data, &config)
 	if err != nil {
-		return config, fmt.Errorf("failed to unmarshal data to CremaConfig: %w", err)
+		return config, err
 	}
 
 	return config, nil

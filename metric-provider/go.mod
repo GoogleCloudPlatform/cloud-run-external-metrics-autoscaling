@@ -6,7 +6,6 @@ require (
 	cloud.google.com/go/logging v1.13.1
 	cloud.google.com/go/parametermanager v0.3.1
 	cloud.google.com/go/secretmanager v1.16.0
-	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
 	github.com/kedacore/keda/v2 v2.17.3
@@ -18,6 +17,7 @@ require (
 	k8s.io/apimachinery v0.32.2
 	k8s.io/metrics v0.31.2
 	sigs.k8s.io/controller-runtime v0.19.7
+	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
@@ -278,7 +278,6 @@ require (
 	knative.dev/pkg v0.0.0-20250326102644-9f3e60a9244c // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.5.0 // indirect
-	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
 replace github.com/prometheus/prometheus => github.com/prometheus/prometheus v0.54.0

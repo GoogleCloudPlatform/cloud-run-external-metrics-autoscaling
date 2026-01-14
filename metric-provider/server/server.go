@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"crema/metric-provider/internal/clients"
-	"crema/metric-provider/internal/configprovider"
+	"crema/metric-provider/internal/config"
 	"crema/metric-provider/internal/orchestrator"
 	"crema/metric-provider/internal/resolvers"
 	"crema/metric-provider/internal/scaling"
@@ -91,7 +91,7 @@ func New(logger *logr.Logger) (*Server, error) {
 		return nil, fmt.Errorf("parameter version name %q is not well-formed", configID)
 	}
 	region := matches[2]
-	var pmClient configprovider.ParameterManagerClient
+	var pmClient config.ParameterManagerClient
 	if region != "" && region != "global" {
 		pmClient, err = clients.RegionalParameterManager(ctx, region)
 	} else {
@@ -101,10 +101,10 @@ func New(logger *logr.Logger) (*Server, error) {
 		return nil, fmt.Errorf("failed to create parameter manager client: %w", err)
 	}
 
-	configProvider := configprovider.New(pmClient, configID, logger)
+	configProvider := config.NewProvider(pmClient, configID, logger)
 	cremaConfig, err := configProvider.GetCremaConfig(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read crema config: %w", err)
+		return nil, fmt.Errorf("failed to load valid crema config: %w", err)
 	}
 
 	logger.Info("Loaded crema config", "config", cremaConfig)
