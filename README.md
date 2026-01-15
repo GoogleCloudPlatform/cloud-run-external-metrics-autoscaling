@@ -8,14 +8,19 @@ The Cloud Run External Metrics Autoscaling (CREMA) project leverages [KEDA](http
 # Compatibility
 This project currently depends on **KEDA v2.17**. The included table lists various KEDA scalers and their compatibility for use with Cloud Run.
 
-| Scalers                                                                                   | Cloud Run Compatible |
-|:------------------------------------------------------------------------------------------|:---------------------|
-| [Apache Kafka](https://keda.sh/docs/2.17/scalers/apache-kafka/)                           | Verified             |
-| [Cron](https://keda.sh/docs/2.17/scalers/cron/)                                           | Verified             |
-| [Github Runner Scaler](https://keda.sh/docs/2.17/scalers/github-runner/)                  | Verified             |
-| [CPU](https://keda.sh/docs/2.17/scalers/cpu/)                                             | Incompatible         |
-| [Kubernetes Workload](https://keda.sh/docs/2.17/scalers/kubernetes-workload/)             | Incompatible         |
-| [Memory](https://keda.sh/docs/2.17/scalers/memory/)                                       | Incompatible         |
+| Scalers                                                                                   | Cloud Run Compatible | Notes                         |
+|:------------------------------------------------------------------------------------------|:---------------------|:------------------------------|
+| [Apache Kafka](https://keda.sh/docs/2.17/scalers/apache-kafka/)                           | Verified             |                               |
+| [Cron](https://keda.sh/docs/2.17/scalers/cron/)                                           | Verified             |                               |
+| [GCP Pub/Sub](https://keda.sh/docs/2.17/scalers/gcp-pub-sub/)                             | Verified             |                               |
+| [Github Runner Scaler](https://keda.sh/docs/2.17/scalers/github-runner/)                  | Verified             |                               |
+| [Prometheus](https://keda.sh/docs/2.17/scalers/prometheus/)                               | Verified             |                               |
+| [RabbitMQ Queue](https://keda.sh/docs/2.17/scalers/rabbitmq-queue/)                       | Verified             |                               |
+| [Redis Lists](https://keda.sh/docs/2.17/scalers/redis-lists/)                             | Verified             |                               |
+| [Temporal](https://keda.sh/docs/2.17/scalers/temporal/)                                   | Verified             |                               |
+| [CPU](https://keda.sh/docs/2.17/scalers/cpu/)                                             | Incompatible         | Scaler is Kubernetes-specific |
+| [Kubernetes Workload](https://keda.sh/docs/2.17/scalers/kubernetes-workload/)             | Incompatible         | Scaler is Kubernetes-specific |
+| [Memory](https://keda.sh/docs/2.17/scalers/memory/)                                       | Incompatible         | Scaler is Kubernetes-specific |
 
 See https://keda.sh/docs/2.17/scalers/ for the full list of KEDA's scalers. The compatibility for any KEDA scaler not listed above is currently unknown. Please file an issue if you believe a scaler does not work.
 
@@ -252,8 +257,6 @@ If configured, CREMA will emit the following metrics:
 - `custom.googleapis.com/requested_instance_count`: The number of instances requested, per Cloud Run scaled object
 
 ## Known Issues
-*   **CREMA does not currently resolve environment variables:** As a result, KEDA configuration fields which rely on environment variables, i.e. those with a `FromEnv` suffix such as `usernameFromEnv` `passwordFromEnv` from KEDA's [Redis  scaler](https://keda.sh/docs/2.17/scalers/redis-lists/), are not supported.
-
 *   **Slow metrics in Cloud Monitoring:** Many Google Cloud Monitoring metrics have [2+ minute ingestion delay](https://docs.cloud.google.com/monitoring/api/v3/latency-n-retention#latency) which may affect scaling responsiveness for Google Cloud Platform scalers. See the [Google Cloud metrics list](https://docs.cloud.google.com/monitoring/api/metrics_gcp) for the underlying metrics used by the scaler for latency details.
 
 *   **A given Cloud Run service or worker pool should only be scaled by a single CREMA deployment:** Scaling the same service or worker pool from multiple CREMA deployments can lead to race conditions and unexpected scaling behavior.
