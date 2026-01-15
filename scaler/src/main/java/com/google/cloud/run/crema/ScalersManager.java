@@ -80,7 +80,7 @@ public final class ScalersManager {
                   .setStatus(scalingStatus)
                   .build();
             } catch (ExecutionException | IOException | InterruptedException e) {
-              logger.atWarning().withCause(e).log("[SCALER] Failed to scale %s", scaleTargetName);
+              logger.atWarning().withCause(e).log("Failed to scale %s", scaleTargetName);
               return ScalingResult.newBuilder()
                   .setScaleTargetName(scaleTargetName)
                   .setStatus(ScalingStatus.FAILED)
@@ -96,7 +96,7 @@ public final class ScalersManager {
       try {
         results.add(future.get());
       } catch (ExecutionException e) {
-        logger.atWarning().withCause(e).log("[SCALER] Failed to get scaling result");
+        logger.atWarning().withCause(e).log("Failed to get scaling result");
         results.add(ScalingResult.newBuilder().setStatus(ScalingStatus.FAILED).build());
       }
     }
@@ -126,7 +126,7 @@ public final class ScalersManager {
         new Scaler(cloudRunClientWrapper, metricsService, staticConfig, workloadInfo.projectId());
 
     scalers.put(scaleTargetName, scaler);
-    logger.atInfo().log("[SCALER] Created new scaler for %s", scaleTargetName);
+    logger.atInfo().log("Created new scaler for %s", scaleTargetName);
     return scaler;
   }
 }

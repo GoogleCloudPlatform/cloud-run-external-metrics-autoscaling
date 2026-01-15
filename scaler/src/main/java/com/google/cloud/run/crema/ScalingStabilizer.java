@@ -180,8 +180,7 @@ public class ScalingStabilizer {
               behavior, time, currentInstanceCount, recommendedInstances, bounds);
       if (boundedRecommendation < recommendedInstances) {
         logger.atInfo().log(
-            "[SCALER] For workload %s, scale up is bounded down to %d from the recommendation of"
-                + " %d",
+            "For workload %s, scale up is bounded down to %d from the recommendation of" + " %d",
             workloadName, boundedRecommendation, recommendedInstances);
       }
     } else if (recommendedInstances < currentInstanceCount) {
@@ -190,8 +189,7 @@ public class ScalingStabilizer {
               behavior, time, currentInstanceCount, recommendedInstances, bounds);
       if (boundedRecommendation > recommendedInstances) {
         logger.atInfo().log(
-            "[SCALER] For workload %s, scale down is bounded up to %d from the recommendation of"
-                + " %d",
+            "For workload %s, scale down is bounded up to %d from the recommendation of" + " %d",
             workloadName, boundedRecommendation, recommendedInstances);
       }
     }
@@ -201,12 +199,10 @@ public class ScalingStabilizer {
 
     if (recommendedInstances > currentInstanceCount) {
       logger.atInfo().log(
-          "[SCALER] Scaling is bounded for %s: %s",
-          workloadName, bounds.toScaleUpBoundDebugString());
+          "Scaling is bounded for %s: %s", workloadName, bounds.toScaleUpBoundDebugString());
     } else if (recommendedInstances < currentInstanceCount) {
       logger.atInfo().log(
-          "[SCALER] Scaling is bounded for %s: %s",
-          workloadName, bounds.toScaleDownBoundDebugString());
+          "Scaling is bounded for %s: %s", workloadName, bounds.toScaleDownBoundDebugString());
     }
 
     return boundedRecommendation;

@@ -67,13 +67,13 @@ public class ScalerServer {
               @Override
               public void run() {
                 // Use stderr here since the logger may have been reset by its JVM shutdown hook.
-                System.err.println("[SCALER] Shutting down gRPC server since JVM is shutting down");
+                System.err.println("Shutting down gRPC server since JVM is shutting down");
                 try {
                   ScalerServer.this.stop();
                 } catch (InterruptedException e) {
                   e.printStackTrace(System.err);
                 }
-                System.err.println("[SCALER] Server shut down");
+                System.err.println("Server shut down");
               }
             });
   }
@@ -82,12 +82,12 @@ public class ScalerServer {
     if (server != null) {
       health.setStatus(ScalerGrpc.SERVICE_NAME, ServingStatus.NOT_SERVING);
       health.setStatus("", ServingStatus.NOT_SERVING);
-      logger.atInfo().log("[SCALER] Shutting down Scaler...");
+      logger.atInfo().log("Shutting down Scaler...");
       server.shutdown();
       if (server.awaitTermination(30, SECONDS)) {
-        logger.atInfo().log("[SCALER] Scaler stopped gracefully.");
+        logger.atInfo().log("Scaler stopped gracefully.");
       } else {
-        logger.atWarning().log("[SCALER] Scaler did not stop gracefully after 30 seconds.");
+        logger.atWarning().log("Scaler did not stop gracefully after 30 seconds.");
         server.shutdownNow();
       }
     }
@@ -101,7 +101,7 @@ public class ScalerServer {
   }
 
   public static void main(String[] args) throws IOException, InterruptedException {
-    System.out.println("[SCALER] Starting Scaler");
+    System.out.println("Starting Scaler");
     final ScalerServer server = new ScalerServer();
     server.start();
     server.blockUntilShutdown();
@@ -117,14 +117,14 @@ public class ScalerServer {
     @Override
     public void scale(ScaleRequest request, StreamObserver<ScaleResponse> responseObserver) {
       logger.atInfo().log(
-          "[SCALER] Received ScaleRequest: %s", TextFormat.printer().shortDebugString(request));
+          "Received ScaleRequest: %s", TextFormat.printer().shortDebugString(request));
 
       ScaleResponse.Builder responseBuilder = ScaleResponse.newBuilder();
       try {
         List<ScalingResult> results = scalersManager.scale(request.getScaledObjectMetricsList());
         responseBuilder.addAllResults(results);
       } catch (InterruptedException e) {
-        logger.atWarning().withCause(e).log("[SCALER] Failed to get scaling result");
+        logger.atWarning().withCause(e).log("Failed to get scaling result");
         Thread.currentThread().interrupt();
       }
 

@@ -18,9 +18,9 @@
 package com.google.cloud.run.crema.clients;
 
 import com.google.cloud.monitoring.v3.MetricServiceClient;
+import com.google.common.flogger.FluentLogger;
 import com.google.monitoring.v3.CreateTimeSeriesRequest;
 import com.google.monitoring.v3.ListTimeSeriesRequest;
-import com.google.common.flogger.FluentLogger;
 import java.io.IOException;
 
 /** Wrapper around Cloud Monitoring to allow mocking in tests. */

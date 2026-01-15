@@ -88,14 +88,13 @@ public class Scaler {
 
     int currentInstanceCount =
         InstanceCountProvider.getInstanceCount(cloudRunClientWrapper, workloadInfo);
-    logger.atInfo().log(
-        "[SCALER] Current instances for %s: %d", workloadName, currentInstanceCount);
+    logger.atInfo().log("Current instances for %s: %d", workloadName, currentInstanceCount);
 
     int unboundedRecommendation = 0;
     boolean hasValidTrigger = false;
 
     if (scaledObjectMetrics.getMetricsCount() == 0) {
-      logger.atInfo().log("[SCALER] No metrics configured for %s, scaling down to 0", workloadName);
+      logger.atInfo().log("No metrics configured for %s, scaling down to 0", workloadName);
       updateInstanceCount(0, workloadInfo);
       return ScalingStatus.SUCCEEDED;
     }
@@ -112,13 +111,13 @@ public class Scaler {
                 metric.getValue(), metric.getTargetValue(), currentInstanceCount);
       } else {
         logger.atWarning().log(
-            "[SCALER] Target value and target average value for %s are 0. At least one must be a"
+            "Target value and target average value for %s are 0. At least one must be a"
                 + " non-zero value. Skipping scaling workload %s on the trigger.",
             metric.getTriggerId(), workloadName);
         continue;
       }
       logger.atInfo().log(
-          "[SCALER] Recommendation for %s based on scaling trigger %s: %d",
+          "Recommendation for %s based on scaling trigger %s: %d",
           workloadName, metric.getTriggerId(), recommendation);
 
       if (staticConfig.outputScalerMetrics()) {
@@ -131,7 +130,7 @@ public class Scaler {
 
     if (!hasValidTrigger) {
       logger.atWarning().log(
-          "[SCALER] No valid triggers found for %s. Skipping scaling workload.", workloadName);
+          "No valid triggers found for %s. Skipping scaling workload.", workloadName);
       return ScalingStatus.FAILED;
     }
 
@@ -151,14 +150,13 @@ public class Scaler {
             now,
             workloadName);
 
-    logger.atInfo().log(
-        "[SCALER] Recommended instances for %s: %d", workloadName, newInstanceCount);
+    logger.atInfo().log("Recommended instances for %s: %d", workloadName, newInstanceCount);
     if (newInstanceCount != currentInstanceCount) {
       updateInstanceCount(newInstanceCount, workloadInfo);
       scalingStabilizer.markScaleEvent(
           scalerConfig.getBehavior(), now, currentInstanceCount, newInstanceCount);
     } else {
-      logger.atInfo().log("[SCALER] Recommended instances for %s is unchanged.", workloadName);
+      logger.atInfo().log("Recommended instances for %s is unchanged.", workloadName);
     }
 
     if (staticConfig.outputScalerMetrics()) {
@@ -193,7 +191,7 @@ public class Scaler {
 
     if (newInstanceCount != stabilizedInstanceCount) {
       logger.atInfo().log(
-          "[SCALER] Recommendation for %s was clamped to range [MinReplicaCount=%d,"
+          "Recommendation for %s was clamped to range [MinReplicaCount=%d,"
               + " MaxReplicaCount=%d]",
           workloadName, scalerConfig.getMinInstances(), scalerConfig.getMaxInstances());
     }
@@ -234,7 +232,7 @@ public class Scaler {
           throw new IOException(e);
         }
         logger.atInfo().log(
-            "[SCALER] Sent update request for service %s to set instances to %d.",
+            "Sent update request for service %s to set instances to %d.",
             workloadInfo.name(), newInstanceCount);
       } else {
         cloudRunClientWrapper.updateWorkerPoolManualInstances(
@@ -243,7 +241,7 @@ public class Scaler {
             workloadInfo.projectId(),
             workloadInfo.location());
         logger.atInfo().log(
-            "[SCALER] Sent update request for workerpool %s to set instances to %d.",
+            "Sent update request for workerpool %s to set instances to %d.",
             workloadInfo.name(), newInstanceCount);
       }
     }
