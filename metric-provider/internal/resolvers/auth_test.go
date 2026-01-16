@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package auth
+package resolvers
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestResolver_ResolveAuthRef(t *testing.T) {
+func TestAuthResolver_ResolveAuthRef(t *testing.T) {
 	ctx := context.Background()
 
 	testCases := []struct {
@@ -107,7 +107,7 @@ func TestResolver_ResolveAuthRef(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			resolver := NewResolver(tc.client)
+			resolver := NewAuthResolver(tc.client)
 			result, err := resolver.ResolveAuthRef(ctx, tc.triggerAuths, tc.triggerAuthName)
 
 			if tc.expectedErr != nil {
@@ -125,7 +125,7 @@ func TestResolver_ResolveAuthRef(t *testing.T) {
 	}
 }
 
-func TestResolver_resolveAuthParams(t *testing.T) {
+func TestAuthResolver_resolveAuthParams(t *testing.T) {
 	ctx := context.Background()
 
 	testCases := []struct {
@@ -168,7 +168,7 @@ func TestResolver_resolveAuthParams(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			resolver := NewResolver(tc.client)
+			resolver := NewAuthResolver(tc.client)
 			result, err := resolver.resolveAuthParams(ctx, tc.spec)
 
 			if tc.expectedErr != nil {

@@ -22,10 +22,10 @@ import (
 	"sync"
 	"time"
 
-	"crema/metric-provider/internal/auth"
 	"crema/metric-provider/internal/clients"
 	"crema/metric-provider/internal/configprovider"
 	"crema/metric-provider/internal/orchestrator"
+	"crema/metric-provider/internal/resolvers"
 	"crema/metric-provider/internal/scaling"
 
 	"github.com/go-logr/logr"
@@ -100,7 +100,7 @@ func New(logger *logr.Logger) (*Server, error) {
 		pollingInterval = &val
 	}
 
-	authResolver := auth.NewResolver(secretManagerClient)
+	authResolver := resolvers.NewAuthResolver(secretManagerClient)
 	builderFactory := scaling.NewBuilderFactory(authResolver, defaultGlobalHttpTimeout, logger)
 	stateProvider := scaling.NewStateProvider(logger)
 	orchestrator := orchestrator.New(scalerServerClient, &cremaConfig, builderFactory, stateProvider, logger)

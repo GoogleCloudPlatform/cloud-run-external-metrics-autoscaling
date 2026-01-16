@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"crema/metric-provider/internal/auth"
+	"crema/metric-provider/internal/resolvers"
 	"crema/metric-provider/internal/clients"
 	"crema/metric-provider/internal/logging"
 
@@ -36,7 +36,7 @@ func TestBuilderFactory_MakeBuilders(t *testing.T) {
 		secretClient := &clients.StubSecretManagerClient{
 			ProjectID: "test-project",
 		}
-		authResolver := auth.NewResolver(secretClient)
+		authResolver := resolvers.NewAuthResolver(secretClient)
 		factory := NewBuilderFactory(authResolver, 1*time.Second, &logger)
 		scaledObject := &kedav1alpha1.ScaledObject{
 			ObjectMeta: metav1.ObjectMeta{
@@ -72,7 +72,7 @@ func TestBuilderFactory_MakeBuilders(t *testing.T) {
 		secretClient := &clients.StubSecretManagerClient{
 			ProjectID: "test-project",
 		}
-		authResolver := auth.NewResolver(secretClient)
+		authResolver := resolvers.NewAuthResolver(secretClient)
 		factory := NewBuilderFactory(authResolver, 1*time.Second, &logger)
 		scaledObjectWithUnknownScaler := &kedav1alpha1.ScaledObject{
 			ObjectMeta: metav1.ObjectMeta{
@@ -105,7 +105,7 @@ func TestBuilderFactory_MakeBuilders(t *testing.T) {
 			},
 			ProjectID: "test-project",
 		}
-		authResolver := auth.NewResolver(secretClient)
+		authResolver := resolvers.NewAuthResolver(secretClient)
 		factory := NewBuilderFactory(authResolver, 1*time.Second, &logger)
 		scaledObject := &kedav1alpha1.ScaledObject{
 			ObjectMeta: metav1.ObjectMeta{

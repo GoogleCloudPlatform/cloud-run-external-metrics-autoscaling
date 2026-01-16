@@ -67,7 +67,7 @@ func (cp *ConfigProvider) GetCremaConfig(ctx context.Context, parameterVersionNa
 		return api.CremaConfig{}, err
 	}
 
-	return getWithDefaults(config), nil
+	return applyDefaults(config), nil
 }
 
 func (cp *ConfigProvider) readParameterVersion(ctx context.Context, parameterVersionName string) (*parametermanagerpb.ParameterVersion, error) {
@@ -88,15 +88,16 @@ func unmarshalCremaConfig(data []byte) (api.CremaConfig, error) {
 	if err != nil {
 		return config, fmt.Errorf("failed to unmarshal data to CremaConfig: %w", err)
 	}
+
 	return config, nil
 }
 
-func getWithDefaults(cremaConfig api.CremaConfig) api.CremaConfig {
-	cremaConfig = getWithDefaultMaxInstances(cremaConfig)
-	return getWithDefaultScalingStabilization(cremaConfig)
+func applyDefaults(cremaConfig api.CremaConfig) api.CremaConfig {
+	cremaConfig = applyDefaultMaxInstances(cremaConfig)
+	return applyDefaultScalingStabilization(cremaConfig)
 }
 
-func getWithDefaultMaxInstances(cremaConfig api.CremaConfig) api.CremaConfig {
+func applyDefaultMaxInstances(cremaConfig api.CremaConfig) api.CremaConfig {
 	for i := range cremaConfig.Spec.ScaledObjects {
 		scaledObject := &cremaConfig.Spec.ScaledObjects[i]
 		if scaledObject.Spec.MaxReplicaCount == nil {
@@ -107,14 +108,14 @@ func getWithDefaultMaxInstances(cremaConfig api.CremaConfig) api.CremaConfig {
 	return cremaConfig
 }
 
-func getWithDefaultScalingStabilization(cremaConfig api.CremaConfig) api.CremaConfig {
+func applyDefaultScalingStabilization(cremaConfig api.CremaConfig) api.CremaConfig {
 	for i, scaledObject := range cremaConfig.Spec.ScaledObjects {
-		cremaConfig.Spec.ScaledObjects[i] = getWithDefaultScalingStabilizationForScaledObject(scaledObject)
+		cremaConfig.Spec.ScaledObjects[i] = applyDefaultScalingStabilizationForScaledObject(scaledObject)
 	}
 	return cremaConfig
 }
 
-func getWithDefaultScalingStabilizationForScaledObject(scaledObject api.CremaScaledObject) api.CremaScaledObject {
+func applyDefaultScalingStabilizationForScaledObject(scaledObject api.CremaScaledObject) api.CremaScaledObject {
 	if scaledObject.Spec.Advanced == nil {
 		scaledObject.Spec.Advanced = &kedav1alpha1.AdvancedConfig{}
 	}
@@ -125,13 +126,13 @@ func getWithDefaultScalingStabilizationForScaledObject(scaledObject api.CremaSca
 		scaledObject.Spec.Advanced.HorizontalPodAutoscalerConfig.Behavior = &autoscalingv2.HorizontalPodAutoscalerBehavior{}
 	}
 
-	behavior := getWithDefaultScalingPolicies(*scaledObject.Spec.Advanced.HorizontalPodAutoscalerConfig.Behavior)
+	behavior := applyDefaultScalingPolicies(*scaledObject.Spec.Advanced.HorizontalPodAutoscalerConfig.Behavior)
 	scaledObject.Spec.Advanced.HorizontalPodAutoscalerConfig.Behavior = &behavior
 
 	return scaledObject
 }
 
-func getWithDefaultScalingPolicies(behavior autoscalingv2.HorizontalPodAutoscalerBehavior) autoscalingv2.HorizontalPodAutoscalerBehavior {
+func applyDefaultScalingPolicies(behavior autoscalingv2.HorizontalPodAutoscalerBehavior) autoscalingv2.HorizontalPodAutoscalerBehavior {
 	if behavior.ScaleDown == nil {
 		scaleDown := &autoscalingv2.HPAScalingRules{}
 

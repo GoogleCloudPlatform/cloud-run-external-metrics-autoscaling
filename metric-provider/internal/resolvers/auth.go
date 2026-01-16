@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package auth
+package resolvers
 
 import (
 	"context"
@@ -24,19 +24,19 @@ type secretManagerClient interface {
 	ReadSecret(ctx context.Context, secretID, version string) (string, error)
 }
 
-type Resolver struct {
+type AuthResolver struct {
 	client secretManagerClient
 }
 
-// Create a new Resolver instance. The zero value is not usable.
-func NewResolver(client secretManagerClient) *Resolver {
-	return &Resolver{
+// Create a new AuthResolver instance. The zero value is not usable.
+func NewAuthResolver(client secretManagerClient) *AuthResolver {
+	return &AuthResolver{
 		client: client,
 	}
 }
 
 // ResolveAuthRef returns the auth params for the trigger authentication object with the given name
-func (r *Resolver) ResolveAuthRef(ctx context.Context, triggerAuths []api.TriggerAuthentication, triggerAuthName string) (map[string]string, error) {
+func (r *AuthResolver) ResolveAuthRef(ctx context.Context, triggerAuths []api.TriggerAuthentication, triggerAuthName string) (map[string]string, error) {
 	if triggerAuths == nil {
 		return nil, fmt.Errorf("no trigger authentication provided")
 	}
@@ -50,7 +50,7 @@ func (r *Resolver) ResolveAuthRef(ctx context.Context, triggerAuths []api.Trigge
 	return nil, fmt.Errorf("no matching trigger authentication for ref `%s`", triggerAuthName)
 }
 
-func (r *Resolver) resolveAuthParams(ctx context.Context, triggerAuthSpec api.TriggerAuthenticationSpec) (map[string]string, error) {
+func (r *AuthResolver) resolveAuthParams(ctx context.Context, triggerAuthSpec api.TriggerAuthenticationSpec) (map[string]string, error) {
 	result := make(map[string]string)
 
 	if triggerAuthSpec.GCPSecretManager != nil && len(triggerAuthSpec.GCPSecretManager.Secrets) > 0 {

@@ -17,7 +17,7 @@ package scaling
 import (
 	"context"
 	"crema/metric-provider/api"
-	"crema/metric-provider/internal/auth"
+	"crema/metric-provider/internal/resolvers"
 
 	"fmt"
 	"time"
@@ -32,13 +32,13 @@ import (
 
 // BuilderFactory contains the logic for creating ScalerBuilders.
 type BuilderFactory struct {
-	authResolver      *auth.Resolver
+	authResolver      *resolvers.AuthResolver
 	globalHTTPTimeout time.Duration
 	logger            *logr.Logger
 }
 
 // Create a new BuilderFactory instance. The zero value is not usable.
-func NewBuilderFactory(authResolver *auth.Resolver, globalHTTPTimeout time.Duration, logger *logr.Logger) *BuilderFactory {
+func NewBuilderFactory(authResolver *resolvers.AuthResolver, globalHTTPTimeout time.Duration, logger *logr.Logger) *BuilderFactory {
 	return &BuilderFactory{
 		authResolver:      authResolver,
 		globalHTTPTimeout: globalHTTPTimeout,
@@ -51,6 +51,7 @@ func NewBuilderFactory(authResolver *auth.Resolver, globalHTTPTimeout time.Durat
 func (bf *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, asMetricSource bool) ([]cache.ScalerBuilder, error) {
 	logger := bf.logger.WithValues("scaleTargetName", scaledObject.Spec.ScaleTargetRef.Name)
 	builders := make([]cache.ScalerBuilder, 0, len(scaledObject.Spec.Triggers))
+	resolvedEnv := resolvers.ResolveEnv()
 
 	for i, trigger := range scaledObject.Spec.Triggers {
 		perTriggerLogger := logger.WithValues("triggerIndex", i)
@@ -71,7 +72,7 @@ func (bf *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1
 				TriggerMetadata:         trigger.Metadata,
 				TriggerType:             trigger.Type,
 				TriggerUseCachedMetrics: trigger.UseCachedMetrics,
-				ResolvedEnv:             make(map[string]string),
+				ResolvedEnv:             resolvedEnv,
 				AuthParams:              authParams,
 				GlobalHTTPTimeout:       bf.globalHTTPTimeout,
 				TriggerIndex:            i,
