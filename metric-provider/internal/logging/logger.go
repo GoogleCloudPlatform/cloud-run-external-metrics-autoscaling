@@ -43,9 +43,19 @@ func NewLogger() logr.Logger {
 	prefix := "[METRIC-PROVIDER]"
 	stdErrLogger := log.New(os.Stderr, "", 0)
 
-	enableCloudLogging, err := strconv.ParseBool(os.Getenv(enableCloudLoggingEnvVar))
-	if err != nil {
-		stdErrLogger.Printf("[ERROR] %s Failed to parse %s to bool; logs will be mitted to stdout and stderr", prefix, enableCloudLoggingEnvVar)
+	value, isSet := os.LookupEnv(enableCloudLoggingEnvVar)
+	var enableCloudLogging bool
+
+	if !isSet {
+		stdErrLogger.Printf("[INFO] %s Environment variable %s is unset; logs will be emitted to stdout and stderr", prefix, enableCloudLoggingEnvVar)
+		enableCloudLogging = false
+	} else {
+		var err error
+		enableCloudLogging, err = strconv.ParseBool(value)
+		if err != nil {
+			stdErrLogger.Printf("[ERROR] %s Failed to parse %s='%s' to bool; logs will be emitted to stdout and stderr", prefix, enableCloudLoggingEnvVar, value)
+			enableCloudLogging = false
+		}
 	}
 
 	var cloudLogger *logging.Logger
