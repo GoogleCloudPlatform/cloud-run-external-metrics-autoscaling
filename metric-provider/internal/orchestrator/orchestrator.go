@@ -65,8 +65,8 @@ func New(
 	}
 }
 
-// RefreshMetrics fetches new metrics and provide them to scaler.
-func (o *Orchestrator) RefreshMetrics(ctx context.Context) {
+// RefreshMetrics fetches metrics for all scaled objects and sends them in a single request to Scaler
+func (o *Orchestrator) RefreshMetrics(ctx context.Context) error {
 	o.logger.Info("Starting metric collection cycle")
 
 	kedaScaledObjects := scaling.ToKedaScaledObjects(o.cremaConfig)
@@ -78,6 +78,7 @@ func (o *Orchestrator) RefreshMetrics(ctx context.Context) {
 		logger := o.logger.WithValues("scaleTargetName", kedaScaledObject.Spec.ScaleTargetRef.Name)
 		builders, err := o.builderFactory.MakeBuilders(ctx, &kedaScaledObject, triggerAuthentications /*asMetricSource=*/, true)
 
+		// Log errors here rather than returning as we may still be able to retrieve metrics and scale other scaled objects
 		if err != nil {
 			logger.Error(err, "Unable to refresh metrics")
 			continue
@@ -103,12 +104,13 @@ func (o *Orchestrator) RefreshMetrics(ctx context.Context) {
 		response, err := o.scalerClient.Scale(ctx, scaleRequest)
 		if err != nil {
 			o.logger.Error(err, "Failed to send scale request")
-		} else {
-			o.logger.Info("Received scale response", "response", response)
+			return err
 		}
+		o.logger.Info("Received scale response", "response", response)
 	} else {
 		o.logger.Info("No objects to scale; skipping scale request")
 	}
+	return nil
 }
 
 func toMetrics(scaledObjectState scaling.ScaledObjectState) []*pb.Metric {

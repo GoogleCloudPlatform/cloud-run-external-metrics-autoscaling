@@ -41,7 +41,7 @@ const (
 )
 
 type Orchestrator interface {
-	RefreshMetrics(ctx context.Context)
+	RefreshMetrics(ctx context.Context) error
 }
 
 type ScalerServerClient interface {
@@ -120,6 +120,7 @@ func (s *Server) Start(ctx context.Context) error {
 	var wg sync.WaitGroup
 
 	if s.pollingInterval != nil {
+		s.logger.Info("Starting metric polling", "interval", s.pollingInterval.String())
 		// Wait until we poling stops to gracefully shutdown
 		wg.Add(1)
 		go func() {
@@ -130,7 +131,9 @@ func (s *Server) Start(ctx context.Context) error {
 			for {
 				select {
 				case <-ticker.C:
-					s.scalingOrchestrator.RefreshMetrics(ctx)
+					if err := s.scalingOrchestrator.RefreshMetrics(ctx); err != nil {
+						s.logger.Error(err, "Failed to refresh metrics")
+					}
 				case <-ctx.Done():
 					s.logger.Info("Polling stopped")
 					return
@@ -148,14 +151,20 @@ func (s *Server) Start(ctx context.Context) error {
 		Handler: mux,
 	}
 
+	errCh := make(chan error, 1)
 	go func() {
 		s.logger.Info("Listening on port", "port", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			s.logger.Error(err, "Failed to start HTTP server")
+			errCh <- err
 		}
 	}()
 
-	<-ctx.Done()
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+	}
 
 	s.logger.Info("Shutting down server...")
 
@@ -178,8 +187,11 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.scalingOrchestrator.RefreshMetrics(r.Context())
-	// TODO: Improve response handling to surface failures
+	if err := s.scalingOrchestrator.RefreshMetrics(r.Context()); err != nil {
+		s.logger.Error(err, "Failed to refresh metrics")
+		http.Error(w, "failed to refresh metrics", http.StatusInternalServerError)
+		return
+	}
 	fmt.Fprint(w, "ok")
 }
 

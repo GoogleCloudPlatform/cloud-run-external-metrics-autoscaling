@@ -391,7 +391,10 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.Anything, mock.Anything).Return(*scaledObjectState, nil)
 		mockScalerClient.On("Scale", mock.Anything, mock.Anything).Return(nil, errors.New("Scale error"))
 
-		orchestrator.RefreshMetrics(context.Background())
+		err := orchestrator.RefreshMetrics(context.Background())
+		if err == nil {
+			t.Errorf("Expected an error from RefreshMetrics, got nil")
+		}
 
 		mockScalerClient.AssertExpectations(t)
 	})

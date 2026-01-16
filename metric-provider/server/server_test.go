@@ -28,8 +28,9 @@ type mockOrchestrator struct {
 	refreshMetricsCalled chan bool
 }
 
-func (m *mockOrchestrator) RefreshMetrics(ctx context.Context) {
+func (m *mockOrchestrator) RefreshMetrics(ctx context.Context) error {
 	m.refreshMetricsCalled <- true
+	return nil
 }
 
 func newMockOrchestrator() *mockOrchestrator {
