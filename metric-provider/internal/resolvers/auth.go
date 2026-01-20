@@ -18,6 +18,8 @@ import (
 	"context"
 	"crema/metric-provider/api"
 	"fmt"
+
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 )
 
 type secretManagerClient interface {
@@ -35,19 +37,54 @@ func NewAuthResolver(client secretManagerClient) *AuthResolver {
 	}
 }
 
-// ResolveAuthRef returns the auth params for the trigger authentication object with the given name
-func (r *AuthResolver) ResolveAuthRef(ctx context.Context, triggerAuths []api.TriggerAuthentication, triggerAuthName string) (map[string]string, error) {
+// ResolveAuthRefAndPodIdentity returns the auth params for the trigger authentication object with the given name
+func (r *AuthResolver) ResolveAuthRefAndPodIdentity(ctx context.Context, triggerAuths []api.TriggerAuthentication, triggerAuthName string) (map[string]string, kedav1alpha1.AuthPodIdentity, error) {
+	podIdentity := kedav1alpha1.AuthPodIdentity{Provider: kedav1alpha1.PodIdentityProviderNone}
+
 	if triggerAuths == nil {
-		return nil, fmt.Errorf("no trigger authentication provided")
+		return nil, podIdentity, fmt.Errorf("no trigger authentication provided")
 	}
+
+	var triggerAuthSpec *api.TriggerAuthenticationSpec
 
 	for _, triggerAuth := range triggerAuths {
 		if triggerAuth.ObjectMeta.Name == triggerAuthName {
-			return r.resolveAuthParams(ctx, triggerAuth.Spec)
+			triggerAuthSpec = &triggerAuth.Spec
+			break
 		}
 	}
 
-	return nil, fmt.Errorf("no matching trigger authentication for ref `%s`", triggerAuthName)
+	if triggerAuthSpec == nil {
+		return nil, podIdentity, fmt.Errorf("no matching trigger authentication for ref `%s`", triggerAuthName)
+	}
+
+	authParams, err := r.resolveAuthParams(ctx, *triggerAuthSpec)
+
+	if err != nil {
+		return nil, podIdentity, err
+	}
+
+	podIdentity, err = resolvePodIdentity(*triggerAuthSpec)
+
+	if err != nil {
+		return nil, podIdentity, err
+	}
+
+	return authParams, podIdentity, nil
+}
+
+func resolvePodIdentity(triggerAuthSpec api.TriggerAuthenticationSpec) (kedav1alpha1.AuthPodIdentity, error) {
+	podIdentity := kedav1alpha1.AuthPodIdentity{Provider: kedav1alpha1.PodIdentityProviderNone}
+
+	if triggerAuthSpec.PodIdentity == nil || triggerAuthSpec.PodIdentity.Provider == api.PodIdentityProviderNone {
+		return podIdentity, nil
+	}
+
+	if triggerAuthSpec.PodIdentity.Provider == api.PodIdentityProviderGCP {
+		return kedav1alpha1.AuthPodIdentity{Provider: kedav1alpha1.PodIdentityProviderGCP}, nil
+	}
+
+	return podIdentity, fmt.Errorf("Unsupported pod identity provider %s", triggerAuthSpec.PodIdentity.Provider)
 }
 
 func (r *AuthResolver) resolveAuthParams(ctx context.Context, triggerAuthSpec api.TriggerAuthenticationSpec) (map[string]string, error) {

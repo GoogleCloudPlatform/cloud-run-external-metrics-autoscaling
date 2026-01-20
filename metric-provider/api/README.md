@@ -62,9 +62,27 @@ The example configuration scales a Cloud Run worker pool (`$WORKER_POOL_NAME`) u
 
 If your external metric source requires credentials, you can provide authentication information via `TriggerAuthentication` objects  ([reference](https://keda.sh/docs/2.17/concepts/authentication/#re-use-credentials-and-delegate-auth-with-triggerauthentication)). You can provide a list of `TriggerAuthentication` objects under the `triggerAuthentications` field.
 
-CREMA only accepts [GCP Secret Manager Secrets](https://keda.sh/docs/2.17/concepts/authentication/#gcp-secret-manager-secrets). All secrets must be in the same GCP project as the CREMA instance. The provided `id` should be your secret's name, not its fully qualified name.
+CREMA supports the following authentication methods:
+- [GCP Pod Identity](https://keda.sh/docs/2.17/concepts/authentication/#gcp-pod-identity): Use the CREMA service account's identity ([Application Default Credentials](https://docs.cloud.google.com/docs/authentication/application-default-credentials)) to authenticate. **This is the recommended authentication method for GCP metric sources.**
+- [GCP Secret Manager Secrets](https://keda.sh/docs/2.17/concepts/authentication/#gcp-secret-manager-secrets): All secrets must be in the same GCP project as the CREMA instance. The provided `id` should be your secret's name, not its fully qualified name.
 
-You'll also have to grant the CREMA service account permission to access those secrets e.g. `Secret Manager Secret Accessor` role (`roles/secretmanager.secretAccessor`) on any secrets referenced in your configuration.
+### GCP Pod Identity
+
+You can specify the `gcp` Pod Identity provider to authenticate with GCP services (e.g. Pub/Sub, Stackdriver) using the CREMA service account's identity.
+
+```yaml
+spec:
+  triggerAuthentications:
+    - metadata:
+        name: $TRIGGER_AUTH_NAME
+      spec:
+        podIdentity:
+          provider: gcp
+```
+
+### GCP Secret Manager
+
+You'll have to grant the CREMA service account permission to access those secrets e.g. `Secret Manager Secret Accessor` role (`roles/secretmanager.secretAccessor`) on any secrets referenced in your configuration.
 
 ```bash
 SECRET_NAME=my-secret
@@ -115,7 +133,7 @@ An optional `pollingInterval` field controls the interval (in seconds) at which 
 # Appendix: Migrating from KEDA
 
 Because `CremaConfig` is composed of KEDA configuration objects, you can mostly copy and paste your existing KEDA `TriggerAuthentication` and `ScaledObject` configurations into the `triggerAuthentications` and `scaledObjects` lists. There are some things to keep in mind though:
-- CREMA only supports `gcpSecretsManager` from KEDA's `TriggerAuthentication`; all other authentication provider fields are ignored.
+- CREMA only supports `gcpSecretsManager` and `podIdentity` (with `provider: gcp`) from KEDA's `TriggerAuthentication`; all other authentication provider fields are ignored.
 - The `scaleTargetRef` must refer to a Cloud Run service or worker pool.
 
 The following KEDA `ScaledObject` fields are not supported and will be ignored by CREMA:

@@ -51,5 +51,19 @@ type TriggerAuthentication struct {
 
 type TriggerAuthenticationSpec struct {
 	// +optional
+	PodIdentity *AuthPodIdentity `json:"podIdentity,omitempty"`
+
+	// +optional
 	GCPSecretManager *kedav1alpha1.GCPSecretManager `json:"gcpSecretManager,omitempty"`
 }
+
+type AuthPodIdentity struct {
+	Provider PodIdentityProvider `json:"provider"`
+}
+
+type PodIdentityProvider string
+
+const (
+	PodIdentityProviderNone          PodIdentityProvider = "none"
+	PodIdentityProviderGCP           PodIdentityProvider = "gcp"
+)

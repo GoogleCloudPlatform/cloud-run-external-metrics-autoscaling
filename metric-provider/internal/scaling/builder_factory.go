@@ -55,16 +55,8 @@ func (bf *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1
 
 	for i, trigger := range scaledObject.Spec.Triggers {
 		perTriggerLogger := logger.WithValues("triggerIndex", i)
-		factory := func() (scalers.Scaler, *scalersconfig.ScalerConfig, error) {
-			var authParams map[string]string
-			if trigger.AuthenticationRef != nil {
-				var err error
-				authParams, err = bf.authResolver.ResolveAuthRef(ctx, triggerAuths, trigger.AuthenticationRef.Name)
-				if err != nil {
-					return nil, nil, fmt.Errorf("failed to resolve auth params for triggerIndex=%d: %w", i, err)
-				}
-			}
 
+		factory := func() (scalers.Scaler, *scalersconfig.ScalerConfig, error) {
 			config := &scalersconfig.ScalerConfig{
 				ScalableObjectName:      scaledObject.Name,
 				ScalableObjectNamespace: scaledObject.Namespace,
@@ -73,13 +65,22 @@ func (bf *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1
 				TriggerType:             trigger.Type,
 				TriggerUseCachedMetrics: trigger.UseCachedMetrics,
 				ResolvedEnv:             resolvedEnv,
-				AuthParams:              authParams,
+				AuthParams:              make(map[string]string),
 				GlobalHTTPTimeout:       bf.globalHTTPTimeout,
 				TriggerIndex:            i,
 				MetricType:              trigger.MetricType,
 				AsMetricSource:          asMetricSource,
 				ScaledObject:            scaledObject,
 				TriggerUniqueKey:        fmt.Sprintf("%s-%s-%s-%d", scaledObject.Kind, scaledObject.Namespace, scaledObject.Name, i),
+			}
+
+			if trigger.AuthenticationRef != nil {
+				authParams, podIdentity, err := bf.authResolver.ResolveAuthRefAndPodIdentity(ctx, triggerAuths, trigger.AuthenticationRef.Name)
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to resolve auth params for triggerIndex=%d: %w", i, err)
+				}
+				config.AuthParams = authParams
+				config.PodIdentity = podIdentity
 			}
 
 			scaler, err := buildScaler(ctx, trigger.Type, config)
