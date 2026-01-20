@@ -56,14 +56,14 @@ func ToKedaScaledObjects(cremaConfig *api.CremaConfig) []kedav1alpha1.ScaledObje
 // PopulateTargetValue populates the appropriate target in cremaMetric based on the provided KEDA target
 func PopulateTargetValue(kedaTarget v2.MetricTarget, cremaMetric *pb.Metric) {
 	if kedaTarget.Type == v2.AverageValueMetricType {
-		targetValue := float64(kedaTarget.AverageValue.Value())
+		targetValue := kedaTarget.AverageValue.AsApproximateFloat64()
 		cremaMetric.Target = &pb.Metric_TargetAverageValue{
 			TargetAverageValue: targetValue,
 		}
 		return
 	}
 
-	targetValue := float64(kedaTarget.Value.Value())
+	targetValue := kedaTarget.Value.AsApproximateFloat64()
 	cremaMetric.Target = &pb.Metric_TargetValue{
 		TargetValue: targetValue,
 	}

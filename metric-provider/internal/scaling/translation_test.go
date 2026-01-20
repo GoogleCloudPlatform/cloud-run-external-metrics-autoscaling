@@ -153,43 +153,81 @@ func TestToKedaScaledObjects(t *testing.T) {
 func TestPopulateTargetValue(t *testing.T) {
 	tests := []struct {
 		name       string
+		metric     float64
 		kedaTarget v2.MetricTarget
 		want       *pb.Metric
 	}{
 		{
-			name: "average value",
+			name:   "average value",
+			metric: 10,
 			kedaTarget: v2.MetricTarget{
 				Type:         v2.AverageValueMetricType,
-				AverageValue: resource.NewQuantity(10, resource.DecimalSI),
+				AverageValue: parseQuantity("10"),
 			},
 			want: &pb.Metric{
+				Value: 10,
 				Target: &pb.Metric_TargetAverageValue{
 					TargetAverageValue: 10,
 				},
 			},
 		},
 		{
-			name: "value",
+			name:   "value",
+			metric: 20,
 			kedaTarget: v2.MetricTarget{
 				Type:  v2.ValueMetricType,
-				Value: resource.NewQuantity(20, resource.DecimalSI),
+				Value: parseQuantity("20"),
 			},
 			want: &pb.Metric{
+				Value: 20,
 				Target: &pb.Metric_TargetValue{
 					TargetValue: 20,
+				},
+			},
+		},
+		{
+			name:   "decimal average value",
+			metric: 0.005,
+			kedaTarget: v2.MetricTarget{
+				Type:         v2.AverageValueMetricType,
+				AverageValue: parseQuantity("0.05"),
+			},
+			want: &pb.Metric{
+				Value: 0.005,
+				Target: &pb.Metric_TargetAverageValue{
+					TargetAverageValue: 0.05,
+				},
+			},
+		},
+		{
+			name:   "decimal value",
+			metric: 0.005,
+			kedaTarget: v2.MetricTarget{
+				Type:  v2.ValueMetricType,
+				Value: parseQuantity("0.005"),
+			},
+			want: &pb.Metric{
+				Value: 0.005,
+				Target: &pb.Metric_TargetValue{
+					TargetValue: 0.005,
 				},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := &pb.Metric{}
+			got := &pb.Metric{Value: tt.metric}
 			PopulateTargetValue(tt.kedaTarget, got)
-			if !reflect.DeepEqual(got.Target, tt.want.Target) {
-				t.Errorf("ToCremaMetric() = %v, want %v", got, tt.want)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("PopulateTargetValue() = %v, want %v", got, tt.want)
 			}
 		})
 	}
+}
+
+func parseQuantity(s string) *resource.Quantity {
+	q := resource.MustParse(s)
+	return &q
 }
 
 func TestToPbScaledObject(t *testing.T) {
