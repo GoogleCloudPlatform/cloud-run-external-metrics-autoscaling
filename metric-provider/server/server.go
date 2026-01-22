@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 
@@ -47,6 +48,8 @@ type Orchestrator interface {
 type ScalerServerClient interface {
 	Close() error
 }
+
+var parameterVersionRegex = regexp.MustCompile(`^projects/[^/]+/(locations/([^/]+)/)?parameters/[^/]+/versions/[^/]+$`)
 
 // Server wires up all components and handling incoming http requests.
 type Server struct {
@@ -83,13 +86,23 @@ func New(logger *logr.Logger) (*Server, error) {
 		return nil, fmt.Errorf("failed to create scaler client: %w", err)
 	}
 
-	parameterManagerClient, err := clients.ParameterManager(ctx)
+	matches := parameterVersionRegex.FindStringSubmatch(configID)
+	if matches == nil {
+		return nil, fmt.Errorf("parameter version name %q is not well-formed", configID)
+	}
+	region := matches[2]
+	var pmClient configprovider.ParameterManagerClient
+	if region != "" && region != "global" {
+		pmClient, err = clients.RegionalParameterManager(ctx, region)
+	} else {
+		pmClient, err = clients.GlobalParameterManager(ctx)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parameter manager client: %w", err)
 	}
 
-	configProvider := configprovider.New(parameterManagerClient, logger)
-	cremaConfig, err := configProvider.GetCremaConfig(ctx, configID)
+	configProvider := configprovider.New(pmClient, configID, logger)
+	cremaConfig, err := configProvider.GetCremaConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read crema config: %w", err)
 	}
@@ -118,6 +131,8 @@ func (s *Server) Start(ctx context.Context) error {
 	defer s.scalerServerClient.Close()
 
 	var wg sync.WaitGroup
+
+	s.logger.Info("Starting server")
 
 	if s.pollingInterval != nil {
 		s.logger.Info("Starting metric polling", "interval", s.pollingInterval.String())

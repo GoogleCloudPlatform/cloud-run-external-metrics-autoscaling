@@ -31,35 +31,37 @@ const (
 	defaultScaledownStabilizationWindowSeconds = 300
 )
 
-type parameterManagerClient interface {
+type ParameterManagerClient interface {
 	GetParameterVersion(context.Context, *parametermanagerpb.GetParameterVersionRequest) (*parametermanagerpb.ParameterVersion, error)
 }
 
 // ConfigProvider provides access to configuration.
 type ConfigProvider struct {
-	client parameterManagerClient
-	logger *logr.Logger
+	client               ParameterManagerClient
+	logger               *logr.Logger
+	parameterVersionName string
 }
 
-// Create a new ConfigurationProvider instance.
-func New(parameterManagerClient parameterManagerClient, logger *logr.Logger) *ConfigProvider {
+// New creates a new ConfigurationProvider instance.
+func New(client ParameterManagerClient, parameterVersionName string, logger *logr.Logger) *ConfigProvider {
 	return &ConfigProvider{
-		client: parameterManagerClient,
-		logger: logger,
+		client:               client,
+		logger:               logger,
+		parameterVersionName: parameterVersionName,
 	}
 }
 
 // GetCremaConfig returns CREMA config parsed from the specified parameter version
-func (cp *ConfigProvider) GetCremaConfig(ctx context.Context, parameterVersionName string) (api.CremaConfig, error) {
-	pv, err := cp.readParameterVersion(ctx, parameterVersionName)
+func (cp *ConfigProvider) GetCremaConfig(ctx context.Context) (api.CremaConfig, error) {
+	pv, err := cp.readParameterVersion(ctx, cp.parameterVersionName)
 	if err != nil {
-		return api.CremaConfig{}, fmt.Errorf("failed to get parameter version %s: %w", parameterVersionName, err)
+		return api.CremaConfig{}, fmt.Errorf("failed to get parameter version %s: %w", cp.parameterVersionName, err)
 	}
 
-	cp.logger.Info("Successfully retrieved", "parameter", parameterVersionName, "parameterVersion", pv)
+	cp.logger.Info("Successfully retrieved", "parameter", cp.parameterVersionName, "parameterVersion", pv)
 
 	if pv.Payload == nil || pv.Payload.Data == nil {
-		return api.CremaConfig{}, fmt.Errorf("parameter payload or data is nil for parameter version %s", parameterVersionName)
+		return api.CremaConfig{}, fmt.Errorf("parameter payload or data is nil for parameter version %s", cp.parameterVersionName)
 	}
 
 	config, err := unmarshalCremaConfig(pv.Payload.Data)

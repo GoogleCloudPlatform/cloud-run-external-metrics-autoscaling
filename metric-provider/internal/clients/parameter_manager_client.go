@@ -20,6 +20,7 @@ import (
 
 	apiv1client "cloud.google.com/go/parametermanager/apiv1"
 	pb "cloud.google.com/go/parametermanager/apiv1/parametermanagerpb"
+	"google.golang.org/api/option"
 )
 
 // ParameterManagerClient is a client for interacting with the Google Cloud Parameter Manager.
@@ -27,8 +28,8 @@ type ParameterManagerClient struct {
 	client *apiv1client.Client
 }
 
-// ParameterManager creates a new ParameterManagerClient.
-func ParameterManager(ctx context.Context) (*ParameterManagerClient, error) {
+// GlobalParameterManager creates a new client for Parameter Manager's global endpoint.
+func GlobalParameterManager(ctx context.Context) (*ParameterManagerClient, error) {
 	client, err := apiv1client.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parametermanager client: %w", err)
@@ -36,7 +37,17 @@ func ParameterManager(ctx context.Context) (*ParameterManagerClient, error) {
 	return &ParameterManagerClient{client: client}, nil
 }
 
-// GetParameterVersion retrieves a parameter version from Google Cloud Parameter Manager.
+// RegionalParameterManager creates a new client for Parameter Manager regional endpoint.
+func RegionalParameterManager(ctx context.Context, region string) (*ParameterManagerClient, error) {
+	endpoint := fmt.Sprintf("parametermanager.%s.rep.googleapis.com:443", region)
+	client, err := apiv1client.NewClient(ctx, option.WithEndpoint(endpoint))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create paramestermanager client with endpoint %s: %w", endpoint, err)
+	}
+	return &ParameterManagerClient{client: client}, nil
+}
+
+// GetParameterVersion retrieves a parameter version Parameter Manager.
 func (c *ParameterManagerClient) GetParameterVersion(ctx context.Context, req *pb.GetParameterVersionRequest) (*pb.ParameterVersion, error) {
 	result, err := c.client.GetParameterVersion(ctx, req)
 	if err != nil {

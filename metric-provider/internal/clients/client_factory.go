@@ -41,5 +41,5 @@ func (cf *ClientFactory) NewScalerServerClient(address string) (*ScalerServerCli
 
 // NewParameterManagerClient creates a new ParameterManagerClient.
 func (cf *ClientFactory) NewParameterManagerClient(ctx context.Context) (*ParameterManagerClient, error) {
-	return ParameterManager(ctx)
+	return GlobalParameterManager(ctx)
 }

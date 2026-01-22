@@ -29,6 +29,8 @@ import (
 	parametermanagerpb "cloud.google.com/go/parametermanager/apiv1/parametermanagerpb"
 )
 
+const parameterVersionName = "projects/p/parameters/p/versions/v"
+
 func TestGetCremaConfig(t *testing.T) {
 	configString := `
 apiVersion: crema/v1
@@ -81,9 +83,9 @@ spec:
 	}
 
 	logger := logging.NewLogger()
-	configProvider := New(stubClient, &logger)
+	configProvider := New(stubClient, parameterVersionName, &logger)
 
-	config, err := configProvider.GetCremaConfig(context.Background(), "test-parameter")
+	config, err := configProvider.GetCremaConfig(context.Background())
 	if err != nil {
 		t.Errorf("GetCremaConfig() error = %v, wantErr %v", err, false)
 	}
@@ -215,11 +217,10 @@ spec:
 		ParamVersion: paramVersion,
 		Err:          nil,
 	}
-
 	logger := logging.NewLogger()
-	configProvider := New(stubClient, &logger)
+	configProvider := New(stubClient, parameterVersionName, &logger)
 
-	_, err := configProvider.GetCremaConfig(context.Background(), "test-parameter")
+	_, err := configProvider.GetCremaConfig(context.Background())
 	if err != nil {
 		t.Errorf("GetCremaConfig() error = %v, wantErr %v", err, nil)
 	}
@@ -237,11 +238,10 @@ func TestGetCremaConfig_ReturnsErrorForInvalidYaml(t *testing.T) {
 		ParamVersion: paramVersion,
 		Err:          nil,
 	}
-
 	logger := logging.NewLogger()
-	configProvider := New(stubClient, &logger)
+	configProvider := New(stubClient, parameterVersionName, &logger)
 
-	_, err := configProvider.GetCremaConfig(context.Background(), "test-parameter")
+	_, err := configProvider.GetCremaConfig(context.Background())
 	if err == nil { // We expect an error.
 		t.Errorf("GetCremaConfig() expected an error, got nil")
 	}
@@ -253,11 +253,10 @@ func TestGetCremaConfig_ReturnsErrorOnClientError(t *testing.T) {
 		ParamVersion: nil,
 		Err:          expectedErr,
 	}
-
 	logger := logging.NewLogger()
-	configProvider := New(stubClient, &logger)
+	configProvider := New(stubClient, parameterVersionName, &logger)
 
-	_, err := configProvider.GetCremaConfig(context.Background(), "test-parameter")
+	_, err := configProvider.GetCremaConfig(context.Background())
 	if err == nil {
 		t.Errorf("GetCremaConfig() expected an error, got nil")
 	}
@@ -302,11 +301,10 @@ spec:
 		ParamVersion: paramVersion,
 		Err:          nil,
 	}
-
 	logger := logging.NewLogger()
-	configProvider := New(stubClient, &logger)
+	configProvider := New(stubClient, parameterVersionName, &logger)
 
-	config, err := configProvider.GetCremaConfig(context.Background(), "test-parameter")
+	config, err := configProvider.GetCremaConfig(context.Background())
 	if err != nil {
 		t.Errorf("GetCremaConfig() error = %v, wantErr %v", err, false)
 	}
@@ -332,7 +330,6 @@ spec:
 	if ta2.Spec.GCPSecretManager.Secrets[0].Parameter != "qux" {
 		t.Errorf("unexpected secret parameter: got %v, want %v", ta2.Spec.GCPSecretManager.Secrets[0].Parameter, "qux")
 	}
-
 }
 
 func TestGetCremaConfig_CallsClientWithParameterName(t *testing.T) {
@@ -344,10 +341,10 @@ func TestGetCremaConfig_CallsClientWithParameterName(t *testing.T) {
 		},
 	}
 	logger := logging.NewLogger()
-	configProvider := New(stubClient, &logger)
+	parameterName := parameterVersionName
+	configProvider := New(stubClient, parameterName, &logger)
 
-	parameterName := "my-test-parameter"
-	configProvider.GetCremaConfig(context.Background(), parameterName)
+	configProvider.GetCremaConfig(context.Background())
 
 	if stubClient.LastRequest == nil {
 		t.Fatalf("client was not called")
@@ -383,11 +380,10 @@ spec:
 		ParamVersion: paramVersion,
 		Err:          nil,
 	}
-
 	logger := logging.NewLogger()
-	configProvider := New(stubClient, &logger)
+	configProvider := New(stubClient, parameterVersionName, &logger)
 
-	config, err := configProvider.GetCremaConfig(context.Background(), "test-parameter")
+	config, err := configProvider.GetCremaConfig(context.Background())
 	if err != nil {
 		t.Errorf("GetCremaConfig() error = %v, wantErr %v", err, false)
 	}
@@ -435,11 +431,10 @@ spec:
 		ParamVersion: paramVersion,
 		Err:          nil,
 	}
-
 	logger := logging.NewLogger()
-	configProvider := New(stubClient, &logger)
+	configProvider := New(stubClient, parameterVersionName, &logger)
 
-	config, err := configProvider.GetCremaConfig(context.Background(), "test-parameter")
+	config, err := configProvider.GetCremaConfig(context.Background())
 	if err != nil {
 		t.Errorf("GetCremaConfig() error = %v, wantErr %v", err, false)
 	}
@@ -625,11 +620,10 @@ spec:
 				ParamVersion: paramVersion,
 				Err:          nil,
 			}
-
 			logger := logging.NewLogger()
-			configProvider := New(stubClient, &logger)
+			configProvider := New(stubClient, parameterVersionName, &logger)
 
-			config, err := configProvider.GetCremaConfig(context.Background(), "test-parameter")
+			config, err := configProvider.GetCremaConfig(context.Background())
 			if err != nil {
 				t.Errorf("GetCremaConfig() error = %v, wantErr %v", err, false)
 				return
@@ -716,11 +710,10 @@ spec:
 		ParamVersion: paramVersion,
 		Err:          nil,
 	}
-
 	logger := logging.NewLogger()
-	configProvider := New(stubClient, &logger)
+	configProvider := New(stubClient, parameterVersionName, &logger)
 
-	config, err := configProvider.GetCremaConfig(context.Background(), "test-parameter")
+	config, err := configProvider.GetCremaConfig(context.Background())
 	if err != nil {
 		t.Errorf("GetCremaConfig() error = %v, wantErr %v", err, false)
 	}
