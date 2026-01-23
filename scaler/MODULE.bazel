@@ -26,7 +26,7 @@ module(
 ################
 
 bazel_dep(name = "protobuf", version = "31.1")
-bazel_dep(name = "grpc-java", version = "1.71.0")
+bazel_dep(name = "grpc-java", version = "1.78.0")
 bazel_dep(name = "grpc-proto", version = "0.0.0-20240627-ec30f58")
 bazel_dep(name = "rules_jvm_external", version = "6.7")
 bazel_dep(name = "googleapis", version = "0.0.0-20241220-5e258e33.bcr.1")
@@ -35,18 +35,15 @@ bazel_dep(name = "protoc-gen-validate", version = "1.2.1.bcr.1")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 
-CLOUD_TASKS_PROTO_VERSION = "2.58.0"
-CLOUD_MONITORING_PROTO_VERSION = "3.61.0"
-PROTOBUF_VERSION = "4.29.3"
+CLOUD_TASKS_PROTO_VERSION = "2.82.0"
+CLOUD_MONITORING_PROTO_VERSION = "3.83.0"
+PROTOBUF_VERSION = "4.33.4"
 FLOGGER_VERSION = "0.8"
 
 maven.install(
     artifacts = [
         "com.google.api.grpc:proto-google-cloud-monitoring-v3:" + CLOUD_MONITORING_PROTO_VERSION,
         "com.google.api.grpc:proto-google-cloud-tasks-v2:" + CLOUD_TASKS_PROTO_VERSION,
-        # "com.google.api.grpc:proto-google-common-protos:2.54.1",
-        # "com.google.api-client:google-api-client-gson:2.7.2",
-        # "com.google.apis:google-api-services-run:v2-rev20250223-2.0.0", # Cloud Run API client library
         "com.google.cloud:google-cloud-run:0.78.0",
         "com.google.auto.value:auto-value:1.11.0",
         "com.google.auto.value:auto-value-annotations:1.11.0",
@@ -56,16 +53,13 @@ maven.install(
         "com.google.code.findbugs:jsr305:3.0.2",
         "com.google.flogger:flogger:" + FLOGGER_VERSION,
         "com.google.flogger:flogger-system-backend:" + FLOGGER_VERSION,
-        "com.google.guava:guava:32.1.3-jre",
+        "com.google.guava:guava:33.5.0-jre",
         "com.google.http-client:google-http-client:1.46.3",
         "com.google.http-client:google-http-client-gson:1.46.3", # We need this otherwise strict deps complains about using an indirect dependency for GsonFactory
         "com.google.protobuf:protobuf-java:" + PROTOBUF_VERSION,
         "com.google.protobuf:protobuf-java-util:" + PROTOBUF_VERSION,
-        "com.google.truth:truth:1.4.4",
-        "io.grpc:grpc-all:1.75.0",
-        "io.grpc:grpc-stub:1.75.0",
-        "io.grpc:grpc-services:1.75.0",
-        "io.grpc:grpc-core:1.75.0",
+        "com.google.truth:truth:1.4.5",
+        "io.netty:netty-codec-http:4.1.129.Final",
         "junit:junit:4.13.2",
         "org.apache.kafka:kafka-clients:3.9.0",
         "org.mockito:mockito-core:5.17.0",

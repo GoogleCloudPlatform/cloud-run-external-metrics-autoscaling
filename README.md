@@ -26,7 +26,7 @@ See https://keda.sh/docs/2.17/scalers/ for the full list of KEDA's scalers. The 
 
 # Setup
 
-Follow the instructions below to configure and deploy CREMA as a Cloud Run worker pool to scale your Cloud Run workloads on metrics external to Cloud Run.
+Follow the instructions below to configure and deploy CREMA as a Cloud Run service to scale your Cloud Run workloads on metrics external to Cloud Run.
 
 ## Prerequisites
 
@@ -44,7 +44,7 @@ Follow the instructions below to configure and deploy CREMA as a Cloud Run worke
 
 ## Create a GCP Service Account
 
-Create a GCP service account that will be used by the Cloud Run CREMA worker pool. We'll grant this service account the necessary permissions throughout the setup. Those permissions will be:
+Create a GCP service account that will be used by the Cloud Run CREMA service. We'll grant this service account the necessary permissions throughout the setup. Those permissions will be:
 - `Parameter Manager Parameter Viewer` (`roles/parametermanager.parameterViewer`) to retrieve from Parameter Manager the CREMA configuration you'll be creating.
 - `Cloud Run Developer` (`roles/run.developer`) and `Service Account User` (`roles/iam.serviceAccountUser`) to set the number of instances in your scaled workloads.
 
@@ -152,31 +152,36 @@ gcloud iam service-accounts add-iam-policy-binding \
 We recommend deploying CREMA using Cloud Run's pre-built container image in `us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler`.
 However, you can optionally build the container image yourself from source code using Cloud Build (see [instructions](#optional-build-the-container-image-from-source) below), subject to a 30+ minute build process.
 
-The command here deploys CREMA as a Cloud Run worker pool using the pre-built container image; if you want to deploy your own built container image, update the IMAGE variable to specify it.
+The command here deploys CREMA as a Cloud Run service using the pre-built container image; if you want to deploy your own built container image, update the IMAGE variable to specify it.
 
 Configure the variables and the command deploy command:
-- `WORKER_POOL_NAME`: The name for your CREMA worker pool
-- `WORKER_POOL_REGION`: The region to run your CREMA worker pool in.
+- `SERVICE_NAME`: The name for your CREMA service
+- `SERVICE_REGION`: The region to run your CREMA service in.
 - `CREMA_SERVICE_ACCOUNT_NAME`: The name of the service account which will run CREMA
 - `PARAMETER_VERSION`: The parameter version you created
 
 ```bash
-WORKER_POOL_NAME=my-crema-worker-pool
-WORKER_POOL_REGION=us-central1
+SERVICE_NAME=my-crema-service
+SERVICE_REGION=us-central1
+BASE_IMAGE_REGION=us-central1
 CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
 PARAMETER_VERSION=1
 
 CREMA_CONFIG_PARAM_VERSION=projects/$PROJECT_ID/locations/$PARAMETER_REGION/parameters/$PARAMETER_ID/versions/$PARAMETER_VERSION
 IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.0
 
-gcloud beta run worker-pools deploy $WORKER_POOL_NAME \
-  --scaling=1 \
+gcloud run deploy $SERVICE_NAME \
   --image=${IMAGE} \
-  --region=${WORKER_POOL_REGION} \
+  --region=${SERVICE_REGION} \
+  --base-image=${BASE_IMAGE_REGION}-docker.pkg.dev/serverless-runtimes/google-24/runtimes/java25 \
+  --no-allow-unauthenticated \
+  --no-cpu-throttling \
   --service-account="${CREMA_SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
   --labels=created-by=crema \
   --set-env-vars="CREMA_CONFIG=${CREMA_CONFIG_PARAM_VERSION},OUTPUT_SCALER_METRICS=False,ENABLE_CLOUD_LOGGING=False"
 ```
+
+Note: The container is built using `FROM scratch` to support [automatic base image updates](https://cloud.google.com/run/docs/configuring/services/automatic-base-image-updates). Although matching the base image region to the service region is ideal, it's not strictly required as Cloud Run does not provide base images in all Cloud Run regions.
 
 The following environment variables are checked by the container:
 - `CREMA_CONFIG`: Required. The fully qualified name (FQN) of the parameter version which contains your CREMA config.
@@ -209,10 +214,10 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 
 ## Verify
 
-Use the resource below to verify that your CREMA worker pool is running correctly.
+Use the resource below to verify that your CREMA service is running correctly.
 
 ### Cloud Logging Logs
-CREMA writes logs to Cloud Logging during each scaling cycle. You should see the following entries in your worker pool's logs in Cloud Logging each time metrics are refreshed:
+CREMA writes logs to Cloud Logging during each scaling cycle. You should see the following entries in your service's logs in Cloud Logging each time metrics are refreshed:
 
 Each log message is labeled with the component that emitted it.
 ```
@@ -224,7 +229,7 @@ Each log message is labeled with the component that emitted it.
 [INFO] [SCALER] Recommended instances ...
 ```
 
-TIP: Use the following Cloud Logging query for filtering the CREMA worker pool's logs: `"[SCALER]" OR "[METRIC-PROVIDER]"`
+TIP: Use the following Cloud Logging query for filtering the CREMA service's logs: `"[SCALER]" OR "[METRIC-PROVIDER]"`
 
 ## Optional: Build the container image from source
 

@@ -17,17 +17,21 @@
 # This Dockerfile builds both scaler (Java) and metric-provider (Go)
 # into a container image.
 ARG SRC_DIR=/
+
 ARG UBUNTU=ubuntu
+ARG UBUNTU_VERSION=22.04
+
 ARG GOLANG=golang
+ARG GOLANG_VERSION=1.25.3
 
 # --- Java Builder ---
-FROM $UBUNTU:22.04 AS java_builder
+FROM $UBUNTU:$UBUNTU_VERSION AS java_builder
 ARG SRC_DIR
 
 # Install necessary dependencies for Bazel and the build
 RUN apt-get update && apt-get install -y \
     build-essential \
-    openjdk-21-jdk \
+    openjdk-21-jdk-headless \
     unzip \
     zip \
     wget \
@@ -53,7 +57,7 @@ USER nonroot
 RUN bazel build src/main/java/com/google/cloud/run/crema:scaler_server_deploy.jar
 
 # --- Go Builder ---
-FROM $GOLANG:1.25.3 AS go_builder
+FROM $GOLANG:$GOLANG_VERSION AS go_builder
 ARG SRC_DIR
 
 WORKDIR /app
@@ -80,14 +84,15 @@ WORKDIR /app/metric-provider
 RUN go mod download
 RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o main -ldflags "-w -s" .
+RUN chmod +x main
+
+# Make entrypoint script executable for the final image
+COPY ${SRC_DIR}/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # --- Final Image ---
-# TODO: Change this scratch for automatic base image update.
-ARG UBUNTU
-FROM $UBUNTU:22.04
+FROM scratch
 ARG SRC_DIR
-
-RUN apt-get update && apt-get install -y openjdk-21-jdk && rm -rf /var/lib/apt/lists/*
 
 ENV APP_DIR=/app
 WORKDIR $APP_DIR
@@ -96,12 +101,11 @@ WORKDIR $APP_DIR
 COPY --from=java_builder /workspace/src/main/java/com/google/cloud/run/crema/logging.properties $APP_DIR/logging.properties
 COPY --from=java_builder /workspace/bazel-bin/src/main/java/com/google/cloud/run/crema/scaler_server_deploy.jar $APP_DIR/scaler_server.jar
 
-# Copy Go app and give it a more descriptive name
+# Copy Go app
 COPY --from=go_builder /app/metric-provider/main $APP_DIR/metric-provider
 
 # Copy entrypoint script
-COPY ${SRC_DIR}/entrypoint.sh $APP_DIR/entrypoint.sh
-RUN chmod +x $APP_DIR/entrypoint.sh
+COPY --from=go_builder /app/entrypoint.sh $APP_DIR/entrypoint.sh
 
 ENV JAVA_TOOL_OPTIONS="-Djava.util.logging.config.file=$APP_DIR/logging.properties"
 
