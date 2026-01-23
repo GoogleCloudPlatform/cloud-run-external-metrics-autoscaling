@@ -25,7 +25,7 @@ ARG GOLANG=golang
 ARG GOLANG_VERSION=1.25.3
 
 # --- Java Builder ---
-FROM $UBUNTU:$UBUNTU_VERSION AS java_builder
+FROM ${UBUNTU}:${UBUNTU_VERSION} AS java_builder
 ARG SRC_DIR
 
 # Install necessary dependencies for Bazel and the build
@@ -57,7 +57,7 @@ USER nonroot
 RUN bazel build src/main/java/com/google/cloud/run/crema:scaler_server_deploy.jar
 
 # --- Go Builder ---
-FROM $GOLANG:$GOLANG_VERSION AS go_builder
+FROM ${GOLANG}:${GOLANG_VERSION} AS go_builder
 ARG SRC_DIR
 
 WORKDIR /app
