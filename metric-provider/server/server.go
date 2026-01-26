@@ -107,6 +107,8 @@ func New(logger *logr.Logger) (*Server, error) {
 		return nil, fmt.Errorf("failed to read crema config: %w", err)
 	}
 
+	logger.Info("Loaded crema config", "config", cremaConfig)
+
 	var pollingInterval *time.Duration
 	if cremaConfig.Spec.PollingIntervalSeconds != nil {
 		val := time.Duration(*cremaConfig.Spec.PollingIntervalSeconds) * time.Second
