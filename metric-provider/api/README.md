@@ -14,6 +14,7 @@ An example `CremaConfig`:
 apiVersion: crema/v1
 kind: CremaConfig
 spec:
+  pollingInterval: 30 # Optional. Seconds
   triggerAuthentications:
     - metadata: # See https://keda.sh/docs/2.17/concepts/authentication
         name: $TRIGGER_AUTH_NAME
@@ -54,9 +55,14 @@ spec:
                   - type: Percent
                     value: 100
                     periodSeconds: 10
-  pollingInterval: 30 # Optional. Seconds
 ```
 The example configuration scales a Cloud Run worker pool (`$WORKER_POOL_NAME`) using `github-runner` metrics. It uses a GCP Secret Manager secret (`$SECRET_NAME`) to authenticate with Github for reading metrics.
+
+## Invocation
+
+`pollingInterval` is an optional field that controls the interval (in seconds) at which CREMA refreshes its metrics. If specified, CREMA will invoke itself in a loop at the specified interval. As part of each invocation, it will retrieve the specified metrics and scale your Cloud Run workload. 
+
+If `pollingInterval` is not specified, the CREMA service will only be invoked via `POST` to your service's Cloud Run URL.
 
 ## TriggerAuthentication
 
@@ -125,10 +131,6 @@ If a `horizontalPodAutoscalerConfig` is not specified, CREMA will apply HPA's [d
 If only `scaleDown` is specified, CREMA will apply `scaleUp` from HPA's default behavior.
 
 If only `scaleUp` is specified, CREMA will apply `scaleDown` from HPA's default behavior.
-
-## Invocation
-
-An optional `pollingInterval` field controls the interval (in seconds) at which CREMA refreshes its metrics. If specified, CREMA will run as a loop, polling for metrics and scaling your Cloud Run workload at the specified interval. If not specified, the CREMA service will need to be invoked via POST to your service's Cloud Run URL.
 
 # Appendix: Migrating from KEDA
 

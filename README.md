@@ -174,9 +174,10 @@ gcloud run deploy $SERVICE_NAME \
   --image=${IMAGE} \
   --region=${SERVICE_REGION} \
   --base-image=${BASE_IMAGE_REGION}-docker.pkg.dev/serverless-runtimes/google-24/runtimes/java25 \
+  --service-account="${CREMA_SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
   --no-allow-unauthenticated \
   --no-cpu-throttling \
-  --service-account="${CREMA_SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --scaling=1 \
   --labels=created-by=crema \
   --set-env-vars="CREMA_CONFIG=${CREMA_CONFIG_PARAM_VERSION},OUTPUT_SCALER_METRICS=False,ENABLE_CLOUD_LOGGING=False"
 ```
