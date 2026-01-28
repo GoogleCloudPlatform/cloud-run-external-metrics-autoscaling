@@ -5,6 +5,15 @@
 
 The Cloud Run External Metrics Autoscaling (CREMA) project leverages [KEDA](https://github.com/kedacore/keda) to provide autoscaling for Cloud Run services and worker pools. This guide will walk you through the deployment of Cloud Run's pre-built CREMA container image.
 
+# Architecture
+
+![Architecture diagram](images/crema-architecture.png)
+
+## How it works
+CREMA can be deployed to Cloud Run to scale Cloud Run workloads based on external metrics in generally two steps:
+*   **Metrics Polling:** Polls external sources (e.g., Kafka lag, Pub/Sub queue depth) using KEDA scalers to retrieve current metric values.
+*   **Setting Instances:** Calculates the recommended instance count and updates the target workload via the Cloud Run Admin API.
+
 # Compatibility
 This project currently depends on **KEDA v2.17**. The included table lists various KEDA scalers and their compatibility for use with Cloud Run.
 
