@@ -18,14 +18,8 @@
 # into a container image.
 ARG SRC_DIR=/
 
-ARG UBUNTU=ubuntu
-ARG UBUNTU_VERSION=22.04
-
-ARG GOLANG=golang
-ARG GOLANG_VERSION=1.25.3
-
 # --- Java Builder ---
-FROM ${UBUNTU}:${UBUNTU_VERSION} AS java_builder
+FROM gcr.io/cloud-marketplace/google/ubuntu2204 AS java_builder
 ARG SRC_DIR
 
 # Install necessary dependencies for Bazel and the build
@@ -57,16 +51,29 @@ USER nonroot
 RUN bazel build src/main/java/com/google/cloud/run/crema:scaler_server_deploy.jar
 
 # --- Go Builder ---
-FROM ${GOLANG}:${GOLANG_VERSION} AS go_builder
+FROM gcr.io/cloud-marketplace/google/ubuntu2204 AS go_builder
 ARG SRC_DIR
 
 WORKDIR /app
 
-# Install dependencies for proto generation
-RUN apt-get update && apt-get install -y protobuf-compiler
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-ENV PATH="$PATH:/go/bin"
+# Install dependencies for Go installation and proto generation
+RUN apt-get update && apt-get install -y \
+    wget \
+    git \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Go
+RUN wget https://go.dev/dl/go1.25.7.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.25.7.linux-amd64.tar.gz && \
+    rm go1.25.7.linux-amd64.tar.gz
+
+# Set Go paths
+ENV PATH="/usr/local/go/bin:/root/go/bin:${PATH}"
+
+# Install proto plugins
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
 
 # Copy all source files needed for the Go build
 COPY ${SRC_DIR}/proto ./proto
