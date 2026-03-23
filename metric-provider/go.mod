@@ -11,7 +11,7 @@ require (
 	github.com/kedacore/keda/v2 v2.17.3
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/api v0.247.0
-	google.golang.org/grpc v1.74.2
+	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.7
 	k8s.io/api v0.32.2
 	k8s.io/apimachinery v0.32.2
