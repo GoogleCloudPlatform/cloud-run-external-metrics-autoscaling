@@ -1,6 +1,3 @@
-> [!NOTE]
-> This feature is available at the [Preview](https://cloud.google.com/products?e=48754805#product-launch-stages) release level.
-
 # Cloud Run External Metrics Autoscaling
 
 The Cloud Run External Metrics Autoscaling (CREMA) project leverages [KEDA](https://github.com/kedacore/keda) to provide autoscaling for Cloud Run services and worker pools. This guide will walk you through the deployment of Cloud Run's pre-built CREMA container image.
