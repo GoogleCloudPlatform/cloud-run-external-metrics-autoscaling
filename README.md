@@ -155,7 +155,8 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 ## Deploy
 
-We recommend deploying CREMA using Cloud Run's pre-built container image in `us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler`.
+We recommend deploying CREMA using Cloud Run's pre-built container image in `us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler`. Review details in the [Image Versioning](#image-versioning) reference section below.
+
 However, you can optionally build the container image yourself from source code using Cloud Build (see [instructions](#optional-build-the-container-image-from-source) below), subject to a 30+ minute build process.
 
 The command here deploys CREMA as a Cloud Run service using the pre-built container image; if you want to deploy your own built container image, update the IMAGE variable to specify it.
@@ -268,7 +269,19 @@ If configured, CREMA will emit the following metrics:
 - `custom.googleapis.com/recommended_instance_count`: The number of instances recommended, per Cloud Run scaled object
 - `custom.googleapis.com/requested_instance_count`: The number of instances requested, per Cloud Run scaled object
 
+## Image Versioning
+
+| Release Image Tag | Supported KEDA Version | Release Status / Details |
+|:------------------|:-----------------------|:-------------------------|
+| `1.0`             | `v2.17`                | Initial stable baseline image version. |
+
+Note: Referencing designated, explicit release revisions (e.g., the latest point release tag) is the preferred application pattern. Avoid using early revisions.
+
+Note: Images published before **April 29, 2026** contain known memory leaks; see [Known Issues](#known-issues) for more details.
+
 ## Known Issues
+*   **Go memory leak:** Builds before **April 29, 2026** left scaler connections open under repeated scaling iteration cycles, leading to gradual memory leaks. This issue is fixed in GitHub and across public release images tagged on or after **April 29, 2026**.
+
 *   **Slow metrics in Cloud Monitoring:** Many Google Cloud Monitoring metrics have [2+ minute ingestion delay](https://docs.cloud.google.com/monitoring/api/v3/latency-n-retention#latency) which may affect scaling responsiveness for Google Cloud Platform scalers. See the [Google Cloud metrics list](https://docs.cloud.google.com/monitoring/api/metrics_gcp) for the underlying metrics used by the scaler for latency details.
 
 *   **A given Cloud Run service or worker pool should only be scaled by a single CREMA deployment:** Scaling the same service or worker pool from multiple CREMA deployments can lead to race conditions and unexpected scaling behavior.

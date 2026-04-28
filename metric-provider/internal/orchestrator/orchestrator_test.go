@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	v2 "k8s.io/api/autoscaling/v2"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/metrics/pkg/apis/external_metrics"
 )
 
 type MockScalerServerClient struct {
@@ -398,4 +399,87 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 
 		mockScalerClient.AssertExpectations(t)
 	})
+
+	t.Run("should close all generated scalers upon cycle completion", func(t *testing.T) {
+		mockScalerClient := new(MockScalerServerClient)
+		mockBuilderFactory := new(MockBuilderFactory)
+		mockStateProvider := new(MockStateProvider)
+
+		cremaConfig := &api.CremaConfig{
+			Spec: api.CremaConfigSpec{
+				ScaledObjects: []api.CremaScaledObject{
+					{
+						Spec: kedav1alpha1.ScaledObjectSpec{
+							ScaleTargetRef: &kedav1alpha1.ScaleTarget{
+								Name: "my-workerpool",
+							},
+							Triggers: []kedav1alpha1.ScaleTriggers{
+								{
+									Type: "foo",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		orchestrator := New(
+			mockScalerClient,
+			cremaConfig,
+			mockBuilderFactory,
+			mockStateProvider,
+			&logger,
+		)
+
+		mockScaler := new(MockLifecycleScaler)
+		builders := []cache.ScalerBuilder{
+			{
+				Scaler: mockScaler,
+			},
+		}
+		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(builders, nil)
+
+		scaledObjectState := &scaling.ScaledObjectState{
+			MetricAndTargetValues: []scaling.MetricAndTargetValue{
+				{
+					MetricValue: 10.0,
+					TargetValue: v2.MetricTarget{
+						Type:         v2.AverageValueMetricType,
+						AverageValue: resource.NewQuantity(15, resource.DecimalSI),
+					},
+					TriggerName: "test-trigger",
+					TriggerType: "test-trigger-type",
+				},
+			},
+		}
+		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.Anything, mock.Anything).Return(*scaledObjectState, nil)
+
+		mockScalerClient.On("Scale", mock.Anything, mock.Anything).Return(&pb.ScaleResponse{}, nil)
+		mockScaler.On("Close", mock.Anything).Return(nil)
+
+		_ = orchestrator.RefreshMetrics(context.Background())
+
+		mockScaler.AssertExpectations(t)
+	})
 }
+
+type MockLifecycleScaler struct {
+	mock.Mock
+}
+
+func (m *MockLifecycleScaler) GetMetricsAndActivity(ctx context.Context, metricName string) ([]external_metrics.ExternalMetricValue, bool, error) {
+	args := m.Called(ctx, metricName)
+	return nil, false, args.Error(0)
+}
+
+func (m *MockLifecycleScaler) GetMetricSpecForScaling(ctx context.Context) []v2.MetricSpec {
+	m.Called(ctx)
+	return nil
+}
+
+func (m *MockLifecycleScaler) Close(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+

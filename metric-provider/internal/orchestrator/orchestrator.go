@@ -75,25 +75,11 @@ func (o *Orchestrator) RefreshMetrics(ctx context.Context) error {
 	var scaledObjectMetrics []*pb.ScaledObjectMetrics
 
 	for _, kedaScaledObject := range kedaScaledObjects {
-		logger := o.logger.WithValues("scaleTargetName", kedaScaledObject.Spec.ScaleTargetRef.Name)
-		builders, err := o.builderFactory.MakeBuilders(ctx, &kedaScaledObject, triggerAuthentications /*asMetricSource=*/, true)
-
-		// Log errors here rather than returning as we may still be able to retrieve metrics and scale other scaled objects
+		metrics, err := o.refreshMetricsForScaledObject(ctx, &kedaScaledObject, triggerAuthentications)
 		if err != nil {
-			logger.Error(err, "Unable to refresh metrics")
 			continue
 		}
-
-		scaledObjectState, err := o.stateProvider.GetScaledObjectState(ctx, &kedaScaledObject, builders)
-		if err != nil {
-			o.logger.Error(err, "Unable to refresh metrics")
-			continue
-		}
-
-		scaledObjectMetrics = append(scaledObjectMetrics, &pb.ScaledObjectMetrics{
-			ScaledObject: scaling.ToPbScaledObject(kedaScaledObject.Spec),
-			Metrics:      toMetrics(scaledObjectState),
-		})
+		scaledObjectMetrics = append(scaledObjectMetrics, metrics)
 	}
 
 	if len(scaledObjectMetrics) > 0 {
@@ -113,6 +99,32 @@ func (o *Orchestrator) RefreshMetrics(ctx context.Context) error {
 	return nil
 }
 
+func (o *Orchestrator) refreshMetricsForScaledObject(
+	ctx context.Context,
+	kedaScaledObject *kedav1alpha1.ScaledObject,
+	triggerAuthentications []api.TriggerAuthentication,
+) (*pb.ScaledObjectMetrics, error) {
+	logger := o.logger.WithValues("scaleTargetName", kedaScaledObject.Spec.ScaleTargetRef.Name)
+	builders, err := o.builderFactory.MakeBuilders(ctx, kedaScaledObject, triggerAuthentications /*asMetricSource=*/, true)
+
+	if err != nil {
+		logger.Error(err, "Unable to refresh metrics")
+		return nil, err
+	}
+	defer closeScalers(ctx, logger, builders)
+
+	scaledObjectState, err := o.stateProvider.GetScaledObjectState(ctx, kedaScaledObject, builders)
+	if err != nil {
+		o.logger.Error(err, "Unable to refresh metrics")
+		return nil, err
+	}
+
+	return &pb.ScaledObjectMetrics{
+		ScaledObject: scaling.ToPbScaledObject(kedaScaledObject.Spec),
+		Metrics:      toMetrics(scaledObjectState),
+	}, nil
+}
+
 func toMetrics(scaledObjectState scaling.ScaledObjectState) []*pb.Metric {
 	var pbMetrics []*pb.Metric
 	for _, metricAndTargetValue := range scaledObjectState.MetricAndTargetValues {
@@ -127,3 +139,15 @@ func toMetrics(scaledObjectState scaling.ScaledObjectState) []*pb.Metric {
 	}
 	return pbMetrics
 }
+
+func closeScalers(ctx context.Context, logger logr.Logger, builders []cache.ScalerBuilder) {
+	for _, b := range builders {
+		if b.Scaler == nil {
+			continue
+		}
+		if err := b.Scaler.Close(ctx); err != nil {
+			logger.Error(err, "Failed to close scaler", "scaler", b.ScalerConfig.TriggerType)
+		}
+	}
+}
+
