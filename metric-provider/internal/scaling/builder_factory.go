@@ -166,7 +166,7 @@ func buildScaler(ctx context.Context, triggerType string, config *scalersconfig.
 	case "cron":
 		return scalers.NewCronScaler(config)
 	case "datadog":
-		return scalers.NewDatadogScaler(ctx, config)
+		return scalers.NewDatadogScaler(config)
 	case "dynatrace":
 		return scalers.NewDynatraceScaler(config)
 	case "elasticsearch":
@@ -205,7 +205,7 @@ func buildScaler(ctx context.Context, triggerType string, config *scalersconfig.
 	case "loki":
 		return scalers.NewLokiScaler(config)
 	case "metrics-api":
-		return scalers.NewMetricsAPIScaler(config)
+		return scalers.NewMetricsAPIScaler(config, nil)
 	case "mongodb":
 		return scalers.NewMongoDBScaler(ctx, config)
 	case "mssql":
@@ -253,7 +253,7 @@ func buildScaler(ctx context.Context, triggerType string, config *scalersconfig.
 	case "splunk":
 		return scalers.NewSplunkScaler(config)
 	case "stan":
-		return scalers.NewStanScaler(config)
+		return nil, fmt.Errorf("trigger type 'stan' (NATS Streaming) is deprecated and unsupported")
 	case "temporal":
 		return scalers.NewTemporalScaler(ctx, config)
 	default:

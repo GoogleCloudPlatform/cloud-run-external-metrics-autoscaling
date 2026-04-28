@@ -12,7 +12,7 @@ CREMA can be deployed to Cloud Run to scale Cloud Run workloads based on externa
 *   **Setting Instances:** Calculates the recommended instance count and updates the target workload via the Cloud Run Admin API.
 
 # Compatibility
-This project currently depends on **KEDA v2.17**. The included table lists various KEDA scalers and their compatibility for use with Cloud Run.
+This project currently depends on **KEDA v2.19**. The included table lists various KEDA scalers and their compatibility for use with Cloud Run.
 
 | Scalers                                                                                   | Cloud Run Compatible | Notes                         |
 |:------------------------------------------------------------------------------------------|:---------------------|:------------------------------|
@@ -175,7 +175,7 @@ CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
 PARAMETER_VERSION=1
 
 CREMA_CONFIG_PARAM_VERSION=projects/$PROJECT_ID/locations/$PARAMETER_REGION/parameters/$PARAMETER_ID/versions/$PARAMETER_VERSION
-IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.0
+IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:2.0
 
 gcloud run deploy $SERVICE_NAME \
   --image=${IMAGE} \
@@ -273,7 +273,8 @@ If configured, CREMA will emit the following metrics:
 
 | Release Image Tag | Supported KEDA Version | Release Status / Details |
 |:------------------|:-----------------------|:-------------------------|
-| `1.0`             | `v2.17`                | Initial stable baseline image version. |
+| `2.0`             | `v2.19`                | Upgraded version supporting latest KEDA frameworks. Preferred release tag. |
+| `1.0`             | `v2.17`                | Legacy release. This version will no longer receive future updates or bug fixes. |
 
 Note: Referencing designated, explicit release revisions (e.g., the latest point release tag) is the preferred application pattern. Avoid using early revisions.
 
