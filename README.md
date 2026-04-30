@@ -272,3 +272,6 @@ If configured, CREMA will emit the following metrics:
 *   **Slow metrics in Cloud Monitoring:** Many Google Cloud Monitoring metrics have [2+ minute ingestion delay](https://docs.cloud.google.com/monitoring/api/v3/latency-n-retention#latency) which may affect scaling responsiveness for Google Cloud Platform scalers. See the [Google Cloud metrics list](https://docs.cloud.google.com/monitoring/api/metrics_gcp) for the underlying metrics used by the scaler for latency details.
 
 *   **A given Cloud Run service or worker pool should only be scaled by a single CREMA deployment:** Scaling the same service or worker pool from multiple CREMA deployments can lead to race conditions and unexpected scaling behavior.
+
+## Support
+For any technical issues and help with troubleshooting please file a support case to receive a response according to our initial response times. Please follow [step-by-step instructions](https://support.google.com/googlecloud/answer/1041916?sjid=12229675440231493334-NA#file_support_case&zippy=%2Cfile-a-support-case) to create a new support case. 
