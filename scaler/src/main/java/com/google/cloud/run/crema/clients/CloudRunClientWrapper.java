@@ -77,7 +77,7 @@ public class CloudRunClientWrapper {
    * Returns the last deployment time for a given worker pool.
    *
    * @param workerpoolName The name of the worker pool.
-   * @return The last deployment time or EPOC if not set.
+   * @return The last deployment time or EPOCH if not set.
    */
   public Instant getWorkerPoolLastDeploymentTime(
       String workerpoolName, String projectId, String region) {
@@ -145,7 +145,7 @@ public class CloudRunClientWrapper {
    * Returns the last deployment time for a given service.
    *
    * @param serviceName The name of the service.
-   * @return The last deployment time or EPOC if not set.
+   * @return The last deployment time or EPOCH if not set.
    */
   public Instant getServiceLastDeploymentTime(String serviceName, String projectId, String region) {
     Service service = getService(serviceName, projectId, region);

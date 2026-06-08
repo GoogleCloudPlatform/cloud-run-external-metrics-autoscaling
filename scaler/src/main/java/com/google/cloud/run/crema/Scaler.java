@@ -210,7 +210,7 @@ public class Scaler {
               newInstanceCount,
               workloadInfo.projectId(),
               workloadInfo.location());
-        } catch (ExecutionException | InterruptedException e) {
+        } catch (ExecutionException | InterruptedException | com.google.api.gax.rpc.ApiException e) {
           logger.atWarning().withCause(e).log(
               "Failed to update min instances for %s", workloadInfo.name());
           throw new IOException(e);
@@ -228,18 +228,22 @@ public class Scaler {
               newInstanceCount,
               workloadInfo.projectId(),
               workloadInfo.location());
-        } catch (UnsupportedOperationException e) {
+        } catch (UnsupportedOperationException | com.google.api.gax.rpc.ApiException e) {
           throw new IOException(e);
         }
         logger.atInfo().log(
             "Sent update request for service %s to set instances to %d.",
             workloadInfo.name(), newInstanceCount);
       } else {
-        cloudRunClientWrapper.updateWorkerPoolManualInstances(
-            workloadInfo.name(),
-            newInstanceCount,
-            workloadInfo.projectId(),
-            workloadInfo.location());
+        try {
+          cloudRunClientWrapper.updateWorkerPoolManualInstances(
+              workloadInfo.name(),
+              newInstanceCount,
+              workloadInfo.projectId(),
+              workloadInfo.location());
+        } catch (com.google.api.gax.rpc.ApiException e) {
+          throw new IOException(e);
+        }
         logger.atInfo().log(
             "Sent update request for workerpool %s to set instances to %d.",
             workloadInfo.name(), newInstanceCount);

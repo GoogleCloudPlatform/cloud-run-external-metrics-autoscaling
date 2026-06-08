@@ -58,6 +58,7 @@ java_library(
         "//proto:scaled_object_java_proto",
         "//proto:scaler_java_proto",
         "//src/main/java/com/google/cloud/run/crema/clients:cloud_run_client_wrapper",
+        "@maven//:com_google_api_gax",
         "@maven//:com_google_flogger_flogger",
         "@maven//:com_google_guava_guava",
     ],

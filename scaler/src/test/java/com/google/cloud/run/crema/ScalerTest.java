@@ -473,4 +473,31 @@ public final class ScalerTest {
     verify(cloudRunClientWrapper)
         .updateServiceMinInstances(SERVICE_NAME, 10, "test-project", "test-location");
   }
+  @Test
+  public void scale_withServiceApiException_throwsIOException()
+      throws IOException, ExecutionException, InterruptedException {
+    Scaler scaler =
+        new Scaler(
+            cloudRunClientWrapper, metricsService, MANUAL_SCALING_STATIC_CONFIG, "test-project");
+    Metric metric = Metric.newBuilder().setValue(2000.0).setTargetValue(1000.0).build();
+    ScaledObject scaledObject =
+        ScaledObject.newBuilder()
+            .setScaleTargetRef(ScaleTargetRef.newBuilder().setName(SERVICE_WORKLOAD_NAME).build())
+            .setAdvanced(ADVANCED)
+            .build();
+    ScaledObjectMetrics scaledObjectMetrics =
+        ScaledObjectMetrics.newBuilder().setScaledObject(scaledObject).addMetrics(metric).build();
+    when(cloudRunClientWrapper.getServiceInstanceCount(
+            SERVICE_NAME, "test-project", "test-location"))
+        .thenReturn(5);
+
+    org.mockito.Mockito.doThrow(mock(com.google.api.gax.rpc.ApiException.class))
+        .when(cloudRunClientWrapper)
+        .updateServiceManualInstances(anyString(), anyInt(), anyString(), anyString());
+
+    IOException thrown =
+        assertThrows(IOException.class, () -> scaler.scale(scaledObjectMetrics));
+
+    assertThat(thrown.getCause()).isInstanceOf(com.google.api.gax.rpc.ApiException.class);
+  }
 }

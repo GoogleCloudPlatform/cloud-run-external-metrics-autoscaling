@@ -92,12 +92,14 @@ public final class ScalersManager {
 
     List<ScalingResult> results = new ArrayList<>();
     List<Future<ScalingResult>> futures = executorService.invokeAll(tasks);
-    for (Future<ScalingResult> future : futures) {
+    for (int i = 0; i < futures.size(); i++) {
+      Future<ScalingResult> future = futures.get(i);
+      String scaleTargetName = scaledObjectMetricsList.get(i).getScaledObject().getScaleTargetRef().getName();
       try {
         results.add(future.get());
       } catch (ExecutionException e) {
-        logger.atWarning().withCause(e).log("Failed to get scaling result");
-        results.add(ScalingResult.newBuilder().setStatus(ScalingStatus.FAILED).build());
+        logger.atWarning().withCause(e).log("Unexpected exception getting scaling result for %s", scaleTargetName);
+        results.add(ScalingResult.newBuilder().setScaleTargetName(scaleTargetName).setStatus(ScalingStatus.FAILED).build());
       }
     }
     return results;

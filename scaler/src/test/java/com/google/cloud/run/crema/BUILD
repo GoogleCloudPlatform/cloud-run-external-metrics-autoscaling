@@ -111,6 +111,7 @@ java_test(
         "//src/main/java/com/google/cloud/run/crema:metrics_service",
         "//src/main/java/com/google/cloud/run/crema:scaler",
         "//src/main/java/com/google/cloud/run/crema/clients:cloud_run_client_wrapper",
+        "@maven//:com_google_api_gax",
         "@maven//:com_google_flogger_flogger_system_backend",
         "@maven//:com_google_truth_truth",
         "@maven//:junit_junit",
