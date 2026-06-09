@@ -163,6 +163,8 @@ func buildScaler(ctx context.Context, triggerType string, config *scalersconfig.
 		return scalers.NewCassandraScaler(config)
 	case "couchdb":
 		return scalers.NewCouchDBScaler(ctx, config)
+	case "cursor":
+		return NewCursorScaler(config)
 	case "cron":
 		return scalers.NewCronScaler(config)
 	case "datadog":
