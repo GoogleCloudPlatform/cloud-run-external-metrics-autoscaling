@@ -22,6 +22,7 @@ java_test(
     test_class = "com.google.cloud.run.crema.clients.CloudRunClientWrapperTest",
     deps = [
         "//src/main/java/com/google/cloud/run/crema/clients:cloud_run_client_wrapper",
+        "@maven//:com_google_api_api_common",
         "@maven//:com_google_api_gax",
         "@maven//:com_google_api_grpc_proto_google_cloud_run_v2",
         "@maven//:com_google_cloud_google_cloud_run",

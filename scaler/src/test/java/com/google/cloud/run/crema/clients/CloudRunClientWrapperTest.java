@@ -21,9 +21,15 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.api.core.ApiFuture;
+import com.google.api.core.ApiFutures;
 import com.google.api.gax.longrunning.OperationFuture;
+import com.google.api.gax.longrunning.OperationSnapshot;
 import com.google.cloud.run.v2.GetServiceRequest;
 import com.google.cloud.run.v2.GetWorkerPoolRequest;
 import com.google.cloud.run.v2.RevisionScaling;
@@ -81,6 +87,23 @@ public final class CloudRunClientWrapperTest {
     cloudRunClientWrapper = new CloudRunClientWrapper(servicesClient, workerPoolsClient);
   }
 
+  @SuppressWarnings("unchecked")
+  private static <T> OperationFuture<T, T> mockAcceptedOperation() {
+    OperationFuture<T, T> operation = mock(OperationFuture.class);
+    ApiFuture<OperationSnapshot> accepted = ApiFutures.immediateFuture(null);
+    when(operation.getInitialFuture()).thenReturn(accepted);
+    return operation;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <T> OperationFuture<T, T> mockRejectedOperation() {
+    OperationFuture<T, T> operation = mock(OperationFuture.class);
+    ApiFuture<OperationSnapshot> rejected =
+        ApiFutures.immediateFailedFuture(new IOException("error"));
+    when(operation.getInitialFuture()).thenReturn(rejected);
+    return operation;
+  }
+
   @Test
   public void getWorkerPoolInstanceCount_withNullScaling_returnsZero() {
     when(workerPoolsClient.getWorkerPool(getWorkerPoolRequestCaptor.capture()))
@@ -114,35 +137,50 @@ public final class CloudRunClientWrapperTest {
     when(workerPoolsClient.getWorkerPool(any(GetWorkerPoolRequest.class)))
         .thenReturn(workerPool);
 
-    OperationFuture<WorkerPool, WorkerPool> operationFuture = mock(OperationFuture.class);
+    OperationFuture<WorkerPool, WorkerPool> operationFuture = mockAcceptedOperation();
     when(workerPoolsClient.updateWorkerPoolAsync(updateWorkerPoolRequestCaptor.capture()))
         .thenReturn(operationFuture);
-    when(operationFuture.get()).thenReturn(workerPool);
 
     cloudRunClientWrapper.updateWorkerPoolManualInstances(WORKERPOOL_NAME, 10, PROJECT_ID, REGION);
 
     UpdateWorkerPoolRequest actual = updateWorkerPoolRequestCaptor.getValue();
     assertThat(actual.getWorkerPool().getScaling().getManualInstanceCount()).isEqualTo(10);
     assertThat(actual.getUpdateMask().getPaths(0)).isEqualTo("scaling.manual_instance_count");
+    verify(operationFuture, never()).get();
   }
 
   @Test
-  public void updateWorkerPoolManualInstances_operationError_throwsExecutionException()
-      throws ExecutionException, InterruptedException {
+  public void updateWorkerPoolManualInstances_requestRejected_throwsExecutionException() {
     WorkerPool workerPool = WorkerPool.newBuilder().build();
     when(workerPoolsClient.getWorkerPool(any(GetWorkerPoolRequest.class)))
         .thenReturn(workerPool);
 
-    OperationFuture<WorkerPool, WorkerPool> operationFuture = mock(OperationFuture.class);
+    OperationFuture<WorkerPool, WorkerPool> operationFuture = mockRejectedOperation();
     when(workerPoolsClient.updateWorkerPoolAsync(any(UpdateWorkerPoolRequest.class)))
         .thenReturn(operationFuture);
-    when(operationFuture.get()).thenThrow(new ExecutionException(new IOException("error")));
 
     assertThrows(
         ExecutionException.class,
         () ->
             cloudRunClientWrapper.updateWorkerPoolManualInstances(
                 WORKERPOOL_NAME, 10, PROJECT_ID, REGION));
+  }
+
+  @Test
+  public void updateWorkerPoolManualInstances_previousOperationPending_dispatchesAnyway()
+      throws ExecutionException, InterruptedException {
+    WorkerPool workerPool = WorkerPool.newBuilder().build();
+    when(workerPoolsClient.getWorkerPool(any(GetWorkerPoolRequest.class)))
+        .thenReturn(workerPool);
+
+    OperationFuture<WorkerPool, WorkerPool> operationFuture = mockAcceptedOperation();
+    when(workerPoolsClient.updateWorkerPoolAsync(any(UpdateWorkerPoolRequest.class)))
+        .thenReturn(operationFuture);
+
+    cloudRunClientWrapper.updateWorkerPoolManualInstances(WORKERPOOL_NAME, 10, PROJECT_ID, REGION);
+    cloudRunClientWrapper.updateWorkerPoolManualInstances(WORKERPOOL_NAME, 20, PROJECT_ID, REGION);
+
+    verify(workerPoolsClient, times(2)).updateWorkerPoolAsync(any(UpdateWorkerPoolRequest.class));
   }
 
   @Test
@@ -268,10 +306,9 @@ public final class CloudRunClientWrapperTest {
             .build();
     when(servicesClient.getService(any(GetServiceRequest.class))).thenReturn(service);
 
-    OperationFuture<Service, Service> operationFuture = mock(OperationFuture.class);
+    OperationFuture<Service, Service> operationFuture = mockAcceptedOperation();
     when(servicesClient.updateServiceAsync(updateServiceRequestCaptor.capture()))
         .thenReturn(operationFuture);
-    when(operationFuture.get()).thenReturn(service);
 
     cloudRunClientWrapper.updateServiceMinInstances(SERVICE_NAME, 10, PROJECT_ID, REGION);
 
@@ -279,18 +316,17 @@ public final class CloudRunClientWrapperTest {
     assertThat(actual.getService().getTemplate().getScaling().getMinInstanceCount()).isEqualTo(10);
     assertThat(actual.getService().getTemplate().getScaling().getMaxInstanceCount()).isEqualTo(222);
     assertThat(actual.getUpdateMask().getPaths(0)).isEqualTo("template.scaling.min_instance_count");
+    verify(operationFuture, never()).get();
   }
 
   @Test
-  public void updateServiceMinInstances_operationError_throwsExecutionException()
-      throws ExecutionException, InterruptedException {
+  public void updateServiceMinInstances_requestRejected_throwsExecutionException() {
     Service service = Service.newBuilder().build();
     when(servicesClient.getService(any(GetServiceRequest.class))).thenReturn(service);
 
-    OperationFuture<Service, Service> operationFuture = mock(OperationFuture.class);
+    OperationFuture<Service, Service> operationFuture = mockRejectedOperation();
     when(servicesClient.updateServiceAsync(any(UpdateServiceRequest.class)))
         .thenReturn(operationFuture);
-    when(operationFuture.get()).thenThrow(new ExecutionException(new IOException("error")));
 
     assertThrows(
         ExecutionException.class,
@@ -305,10 +341,9 @@ public final class CloudRunClientWrapperTest {
             .build();
     when(servicesClient.getService(any(GetServiceRequest.class))).thenReturn(service);
 
-    OperationFuture<Service, Service> operationFuture = mock(OperationFuture.class);
+    OperationFuture<Service, Service> operationFuture = mockAcceptedOperation();
     when(servicesClient.updateServiceAsync(updateServiceRequestCaptor.capture()))
         .thenReturn(operationFuture);
-    when(operationFuture.get()).thenReturn(service);
 
     cloudRunClientWrapper.updateServiceManualInstances(SERVICE_NAME, 10, PROJECT_ID, REGION);
 
@@ -316,10 +351,30 @@ public final class CloudRunClientWrapperTest {
     assertThat(actual.getService().getScaling().getManualInstanceCount()).isEqualTo(10);
     assertThat(actual.getUpdateMask().getPathsList())
         .containsExactly("scaling.manual_instance_count");
+    verify(operationFuture, never()).get();
   }
 
   @Test
-  public void updateServiceManualInstances_operationError_throwsExecutionException()
+  public void updateServiceManualInstances_requestRejected_throwsExecutionException() {
+    Service service =
+        Service.newBuilder()
+            .setScaling(ServiceScaling.newBuilder().setManualInstanceCount(5))
+            .build();
+    when(servicesClient.getService(any(GetServiceRequest.class))).thenReturn(service);
+
+    OperationFuture<Service, Service> operationFuture = mockRejectedOperation();
+    when(servicesClient.updateServiceAsync(any(UpdateServiceRequest.class)))
+        .thenReturn(operationFuture);
+
+    assertThrows(
+        ExecutionException.class,
+        () ->
+            cloudRunClientWrapper.updateServiceManualInstances(
+                SERVICE_NAME, 10, PROJECT_ID, REGION));
+  }
+
+  @Test
+  public void updateServiceManualInstances_previousOperationPending_dispatchesAnyway()
       throws ExecutionException, InterruptedException {
     Service service =
         Service.newBuilder()
@@ -327,15 +382,13 @@ public final class CloudRunClientWrapperTest {
             .build();
     when(servicesClient.getService(any(GetServiceRequest.class))).thenReturn(service);
 
-    OperationFuture<Service, Service> operationFuture = mock(OperationFuture.class);
+    OperationFuture<Service, Service> operationFuture = mockAcceptedOperation();
     when(servicesClient.updateServiceAsync(any(UpdateServiceRequest.class)))
         .thenReturn(operationFuture);
-    when(operationFuture.get()).thenThrow(new ExecutionException(new IOException("error")));
 
-    assertThrows(
-        ExecutionException.class,
-        () ->
-            cloudRunClientWrapper.updateServiceManualInstances(
-                SERVICE_NAME, 10, PROJECT_ID, REGION));
+    cloudRunClientWrapper.updateServiceManualInstances(SERVICE_NAME, 10, PROJECT_ID, REGION);
+    cloudRunClientWrapper.updateServiceManualInstances(SERVICE_NAME, 20, PROJECT_ID, REGION);
+
+    verify(servicesClient, times(2)).updateServiceAsync(any(UpdateServiceRequest.class));
   }
 }

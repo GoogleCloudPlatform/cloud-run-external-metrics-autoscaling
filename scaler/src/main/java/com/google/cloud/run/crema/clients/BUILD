@@ -37,10 +37,12 @@ java_library(
     name = "cloud_run_client_wrapper",
     srcs = ["CloudRunClientWrapper.java"],
     deps = [
+        "@maven//:com_google_api_api_common",
         "@maven//:com_google_api_gax",
         "@maven//:com_google_api_grpc_proto_google_cloud_run_v2",
         "@maven//:com_google_cloud_google_cloud_run",
         "@maven//:com_google_flogger_flogger",
+        "@maven//:com_google_guava_guava",
         "@protobuf//java/core",
     ],
 )

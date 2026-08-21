@@ -17,6 +17,8 @@
 
 package com.google.cloud.run.crema.clients;
 
+import com.google.api.core.ApiFutureCallback;
+import com.google.api.core.ApiFutures;
 import com.google.api.gax.longrunning.OperationFuture;
 import com.google.cloud.run.v2.GetServiceRequest;
 import com.google.cloud.run.v2.GetWorkerPoolRequest;
@@ -33,6 +35,8 @@ import com.google.cloud.run.v2.WorkerPoolName;
 import com.google.cloud.run.v2.WorkerPoolScaling;
 import com.google.cloud.run.v2.WorkerPoolsClient;
 import com.google.common.flogger.FluentLogger;
+import com.google.common.flogger.MetadataKey;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.FieldMask;
 import com.google.protobuf.Timestamp;
 import java.io.IOException;
@@ -42,6 +46,8 @@ import java.util.concurrent.ExecutionException;
 /** Thin wrapper around Cloud Run API */
 public class CloudRunClientWrapper {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
+
+  private static final MetadataKey<String> RESOURCE = MetadataKey.single("resource", String.class);
 
   private final ServicesClient servicesClient;
   private final WorkerPoolsClient workerPoolsClient;
@@ -92,14 +98,17 @@ public class CloudRunClientWrapper {
   /**
    * Updates the number of manual instances for a given worker pool.
    *
+   * <p>Waits only until Cloud Run accepts the update; the operation completes asynchronously.
+   *
    * @param workerpoolName The name of the worker pool to update.
    * @param instances The desired number of instances.
-   * @throws ExecutionException If an error occurs during the API call.
+   * @throws ExecutionException If the update request is rejected.
    * @throws InterruptedException If an error occurs during the API call.
    */
   public void updateWorkerPoolManualInstances(
       String workerpoolName, int instances, String projectId, String region)
       throws ExecutionException, InterruptedException {
+    String resourceName = WorkerPoolName.of(projectId, region, workerpoolName).toString();
     WorkerPool currentWorkerPool = getWorkerPool(workerpoolName, projectId, region);
 
     WorkerPoolScaling newScaling =
@@ -117,7 +126,8 @@ public class CloudRunClientWrapper {
 
     OperationFuture<WorkerPool, WorkerPool> operation =
         workerPoolsClient.updateWorkerPoolAsync(updateRequest);
-    operation.get(); // Wait for completion
+    logCompletionAsync(resourceName, operation);
+    operation.getInitialFuture().get(); // Wait for acceptance only, not completion
   }
 
   /**
@@ -159,14 +169,17 @@ public class CloudRunClientWrapper {
   /**
    * Updates the number of min instances for a given service.
    *
+   * <p>Waits only until Cloud Run accepts the update; the operation completes asynchronously.
+   *
    * @param serviceName The name of the service to update.
    * @param instances The desired number of instances.
-   * @throws ExecutionException If an error occurs during the API call.
+   * @throws ExecutionException If the update request is rejected.
    * @throws InterruptedException If an error occurs during the API call.
    */
   public void updateServiceMinInstances(
       String serviceName, int instances, String projectId, String region)
       throws ExecutionException, InterruptedException {
+    String resourceName = ServiceName.of(projectId, region, serviceName).toString();
     Service currentService = getService(serviceName, projectId, region);
 
     RevisionScaling newScaling =
@@ -189,11 +202,14 @@ public class CloudRunClientWrapper {
             .build();
 
     OperationFuture<Service, Service> operation = servicesClient.updateServiceAsync(updateRequest);
-    operation.get(); // Wait for completion
+    logCompletionAsync(resourceName, operation);
+    operation.getInitialFuture().get(); // Wait for acceptance only, not completion
   }
 
   /**
    * Updates the number of manual instances for a given service.
+   *
+   * <p>Waits only until Cloud Run accepts the update; the operation completes asynchronously.
    *
    * @param serviceName The name of the service to update.
    * @param instances The desired number of instances.
@@ -201,6 +217,7 @@ public class CloudRunClientWrapper {
   public void updateServiceManualInstances(
       String serviceName, int instances, String projectId, String region)
       throws ExecutionException, InterruptedException {
+    String resourceName = ServiceName.of(projectId, region, serviceName).toString();
     Service currentService = getService(serviceName, projectId, region);
 
     ServiceScaling newScaling =
@@ -217,7 +234,27 @@ public class CloudRunClientWrapper {
             .build();
 
     OperationFuture<Service, Service> operation = servicesClient.updateServiceAsync(updateRequest);
-    operation.get(); // Wait for completion
+    logCompletionAsync(resourceName, operation);
+    operation.getInitialFuture().get(); // Wait for acceptance only, not completion
+  }
+
+  private <T> void logCompletionAsync(String resourceName, OperationFuture<T, ?> operation) {
+    ApiFutures.addCallback(
+        operation,
+        new ApiFutureCallback<T>() {
+          @Override
+          public void onSuccess(T result) {
+            logger.atInfo().with(RESOURCE, resourceName)
+            .log("Update operation for %s completed", resourceName);
+          }
+
+          @Override
+          public void onFailure(Throwable t) {
+            logger.atWarning().withCause(t).with(RESOURCE, resourceName)
+            .log("Update operation for %s failed", resourceName);
+          }
+        },
+        MoreExecutors.directExecutor());
   }
 
   private WorkerPool getWorkerPool(String workerpoolName, String projectId, String region) {
