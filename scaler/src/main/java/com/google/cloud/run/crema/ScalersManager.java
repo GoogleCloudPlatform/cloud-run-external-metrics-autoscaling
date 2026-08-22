@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -42,7 +43,7 @@ public final class ScalersManager {
 
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
-  private final Map<String, Scaler> scalers = new HashMap<>();
+  private final Map<String, Scaler> scalers = new ConcurrentHashMap<>();
   private final CloudRunClientWrapper cloudRunClientWrapper;
   private final CloudMonitoringClientWrapper cloudMonitoringClientWrapper;
   private final ExecutorService executorService;
@@ -115,10 +116,24 @@ public final class ScalersManager {
    */
   private Scaler getOrCreateScaler(ScaledObject scaledObject) throws IOException {
     String scaleTargetName = scaledObject.getScaleTargetRef().getName();
-    if (scalers.containsKey(scaleTargetName)) {
-      return scalers.get(scaleTargetName);
+    Scaler existing = scalers.get(scaleTargetName);
+    if (existing != null) {
+      return existing;
     }
 
+    Scaler created = buildScaler(scaledObject);
+    Scaler race = scalers.putIfAbsent(scaleTargetName, created);
+
+    if (race == null) {
+      logger.atInfo().log("Created new scaler for %s", scaleTargetName);
+      return created;
+    }
+
+    return race;
+  }
+
+  private Scaler buildScaler(ScaledObject scaledObject) throws IOException {
+    String scaleTargetName = scaledObject.getScaleTargetRef().getName();
     WorkloadInfoParser.WorkloadInfo workloadInfo = WorkloadInfoParser.parse(scaleTargetName);
     ConfigurationProvider.StaticConfig staticConfig =
         new ConfigurationProvider(new ConfigurationProvider.SystemEnvProvider()).staticConfig();
@@ -126,9 +141,7 @@ public final class ScalersManager {
         new MetricsService(cloudMonitoringClientWrapper, workloadInfo.projectId());
     Scaler scaler =
         new Scaler(cloudRunClientWrapper, metricsService, staticConfig, workloadInfo.projectId());
-
-    scalers.put(scaleTargetName, scaler);
-    logger.atInfo().log("Created new scaler for %s", scaleTargetName);
     return scaler;
   }
+
 }
