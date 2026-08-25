@@ -36,10 +36,10 @@ package com.google.cloud.run.crema;
 
 import com.google.cloud.run.crema.clients.CloudMonitoringClientWrapper;
 import com.google.cloud.run.crema.clients.CloudRunClientWrapper;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.flogger.FluentLogger;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -161,4 +161,8 @@ public final class ScalersManager {
     return scaler;
   }
 
+  @VisibleForTesting
+  Map<String, Scaler> getScalers() {
+    return scalers;
+  }
 }
