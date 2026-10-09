@@ -416,6 +416,31 @@ public final class ScalingStabilizerTest {
   }
 
   @Test
+  public void getStabilizedRecommendation_scaleUpFromZero_countsTowardScaleDownStabilization() {
+    Behavior behavior =
+        Behavior.newBuilder()
+            .setScaleDown(Scaling.newBuilder().setStabilizationWindowSeconds(300).build())
+            .build();
+    Instant now = Instant.now();
+
+    ScalingStabilizer scalingStabilizer = new ScalingStabilizer(0);
+
+    assertThat(
+            scalingStabilizer.getStabilizedRecommendation(
+                behavior, now.plusSeconds(10), 0, 1, "test-workload"))
+        .isEqualTo(1);
+    // The workload took its work off the queue, so the metric drops back to 0.
+    assertThat(
+            scalingStabilizer.getStabilizedRecommendation(
+                behavior, now.plusSeconds(20), 1, 0, "test-workload"))
+        .isEqualTo(1);
+    assertThat(
+            scalingStabilizer.getStabilizedRecommendation(
+                behavior, now.plusSeconds(311), 1, 0, "test-workload"))
+        .isEqualTo(0);
+  }
+
+  @Test
   public void getStabilizedRecommendation_scaleUpInstancesPolicy_returnsInstancesPolicyBound() {
     Policy instancesPolicy =
         Policy.newBuilder().setType(Policy.Type.INSTANCES).setValue(5).setPeriodSeconds(60).build();
