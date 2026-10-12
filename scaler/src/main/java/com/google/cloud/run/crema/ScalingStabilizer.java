@@ -187,6 +187,9 @@ public class ScalingStabilizer {
       int recommendedInstances,
       String workloadName) {
     if (currentInstanceCount == 0 && recommendedInstances > 0) {
+      // Record it like any other recommendation: the scale-down stabilization window has to
+      // cover the instance started here, or the next lower recommendation removes it at once.
+      recommendations.add(new DataPoint(time, recommendedInstances));
       return 1;
     }
     BoundsDebugInfo bounds = new BoundsDebugInfo();
