@@ -28,7 +28,7 @@ variable "crema_config" {
 variable "image" {
   type        = string
   description = "The CREMA container image to deploy."
-  default     = "us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.2"
+  default     = "us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.3"
 }
 
 variable "base_image" {

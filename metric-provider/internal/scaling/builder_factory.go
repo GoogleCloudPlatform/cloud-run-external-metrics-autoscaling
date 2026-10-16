@@ -70,7 +70,7 @@ func (bf *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1
 	for i, trigger := range scaledObject.Spec.Triggers {
 		perTriggerLogger := logger.WithValues("triggerIndex", i)
 
-		factory := func() (scalers.Scaler, *scalersconfig.ScalerConfig, error) {
+		factory := func(ctx context.Context) (scalers.Scaler, *scalersconfig.ScalerConfig, error) {
 			config := &scalersconfig.ScalerConfig{
 				ScalableObjectName:      scaledObject.Name,
 				ScalableObjectNamespace: scaledObject.Namespace,
@@ -111,7 +111,7 @@ func (bf *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1
 			return scaler, config, nil
 		}
 
-		scaler, config, err := factory()
+		scaler, config, err := factory(ctx)
 
 		if err != nil {
 			logger.Error(err, "Failure while building scalers")
@@ -170,7 +170,7 @@ func buildScaler(ctx context.Context, triggerType string, config *scalersconfig.
 	case "azure-queue":
 		return scalers.NewAzureQueueScaler(config)
 	case "azure-servicebus":
-		return scalers.NewAzureServiceBusScaler(ctx, config)
+		return scalers.NewAzureServiceBusScaler(config)
 	case "beanstalkd":
 		return scalers.NewBeanstalkdScaler(config)
 	case "cassandra":
@@ -235,7 +235,7 @@ func buildScaler(ctx context.Context, triggerType string, config *scalersconfig.
 	case "openstack-metric":
 		return scalers.NewOpenstackMetricScaler(ctx, config)
 	case "openstack-swift":
-		return scalers.NewOpenstackSwiftScaler(config)
+		return scalers.NewOpenstackSwiftScaler(ctx, config)
 	case "postgresql":
 		return scalers.NewPostgreSQLScaler(ctx, config)
 	case "predictkube":

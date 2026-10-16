@@ -16,7 +16,7 @@ kind: CremaConfig
 spec:
   pollingInterval: 30 # Optional. Seconds
   triggerAuthentications:
-    - metadata: # See https://keda.sh/docs/2.17/concepts/authentication
+    - metadata: # See https://keda.sh/docs/2.21/concepts/authentication
         name: $TRIGGER_AUTH_NAME
       spec:
         gcpSecretManager:
@@ -30,7 +30,7 @@ spec:
           name: projects/$PROJECT_ID/locations/$SERVICE_REGION/workerpools/$WORKER_POOL_NAME
         minReplicaCount: 0 # Optional. Default: 0
         maxReplicaCount: 100 # Optional. Default: 100
-        triggers: # See https://keda.sh/docs/2.17/scalers/
+        triggers: # See https://keda.sh/docs/2.21/scalers/
           - type: github-runner
             name: my-github-runner-trigger
             metadata:
@@ -66,11 +66,11 @@ If `pollingInterval` is not specified, the CREMA service will only be invoked vi
 
 ## TriggerAuthentication
 
-If your external metric source requires credentials, you can provide authentication information via `TriggerAuthentication` objects  ([reference](https://keda.sh/docs/2.17/concepts/authentication/#re-use-credentials-and-delegate-auth-with-triggerauthentication)). You can provide a list of `TriggerAuthentication` objects under the `triggerAuthentications` field.
+If your external metric source requires credentials, you can provide authentication information via `TriggerAuthentication` objects  ([reference](https://keda.sh/docs/2.21/concepts/authentication/#re-use-credentials-and-delegate-auth-with-triggerauthentication)). You can provide a list of `TriggerAuthentication` objects under the `triggerAuthentications` field.
 
 CREMA supports the following authentication methods:
-- [GCP Pod Identity](https://keda.sh/docs/2.17/concepts/authentication/#gcp-pod-identity): Use the CREMA service account's identity ([Application Default Credentials](https://docs.cloud.google.com/docs/authentication/application-default-credentials)) to authenticate. **This is the recommended authentication method for GCP metric sources.**
-- [GCP Secret Manager Secrets](https://keda.sh/docs/2.17/concepts/authentication/#gcp-secret-manager-secrets): All secrets must be in the same GCP project as the CREMA instance. The provided `id` should be your secret's name, not its fully qualified name.
+- [GCP Pod Identity](https://keda.sh/docs/2.21/concepts/authentication/#gcp-pod-identity): Use the CREMA service account's identity ([Application Default Credentials](https://docs.cloud.google.com/docs/authentication/application-default-credentials)) to authenticate. **This is the recommended authentication method for GCP metric sources.**
+- [GCP Secret Manager Secrets](https://keda.sh/docs/2.21/concepts/authentication/#gcp-secret-manager-secrets): All secrets must be in the same GCP project as the CREMA instance. The provided `id` should be your secret's name, not its fully qualified name.
 
 ### GCP Pod Identity
 
@@ -118,7 +118,7 @@ You can optionally set `minReplicaCount` and/or `maxReplicaCount` to bound scali
 
 ### triggers
 
-Multiple external metric sources can be used to scale. Each entry in the `triggers` list corresponds to an external metric to scale on. Please see the [KEDA reference](https://keda.sh/docs/2.17/scalers/) for configuration details for each metric source type.
+Multiple external metric sources can be used to scale. Each entry in the `triggers` list corresponds to an external metric to scale on. Please see the [KEDA reference](https://keda.sh/docs/2.21/scalers/) for configuration details for each metric source type.
 
 If your external metric source requires authentication, set the `authenticationRef` field to specify one of the `TriggerAuthentication` objects to use for credentials.
 

@@ -12,24 +12,24 @@ CREMA can be deployed to Cloud Run to scale Cloud Run workloads based on externa
 *   **Setting Instances:** Calculates the recommended instance count and updates the target workload via the Cloud Run Admin API.
 
 # Compatibility
-This project currently depends on **KEDA v2.20**. The included table lists various KEDA scalers and their compatibility for use with Cloud Run.
+This project currently depends on **KEDA v2.21**. The included table lists various KEDA scalers and their compatibility for use with Cloud Run.
 
 | Scalers                                                                                   | Cloud Run Compatible | Notes                         |
 |:------------------------------------------------------------------------------------------|:---------------------|:------------------------------|
-| [Apache Kafka](https://keda.sh/docs/2.20/scalers/apache-kafka/)                           | Verified             |                               |
-| [Cron](https://keda.sh/docs/2.20/scalers/cron/)                                           | Verified             |                               |
-| [GCP Pub/Sub](https://keda.sh/docs/2.20/scalers/gcp-pub-sub/)                             | Verified             |                               |
-| [GCP Stackdriver](https://keda.sh/docs/2.20/scalers/gcp-stackdriver/)                     | Verified             |                               |
-| [Github Runner Scaler](https://keda.sh/docs/2.20/scalers/github-runner/)                  | Verified             |                               |
-| [Prometheus](https://keda.sh/docs/2.20/scalers/prometheus/)                               | Verified             |                               |
-| [RabbitMQ Queue](https://keda.sh/docs/2.20/scalers/rabbitmq-queue/)                       | Verified             |                               |
-| [Redis Lists](https://keda.sh/docs/2.20/scalers/redis-lists/)                             | Verified             |                               |
-| [Temporal](https://keda.sh/docs/2.20/scalers/temporal/)                                   | Verified             |                               |
-| [CPU](https://keda.sh/docs/2.20/scalers/cpu/)                                             | Incompatible         | Scaler is Kubernetes-specific |
-| [Kubernetes Workload](https://keda.sh/docs/2.20/scalers/kubernetes-workload/)             | Incompatible         | Scaler is Kubernetes-specific |
-| [Memory](https://keda.sh/docs/2.20/scalers/memory/)                                       | Incompatible         | Scaler is Kubernetes-specific |
+| [Apache Kafka](https://keda.sh/docs/2.21/scalers/apache-kafka/)                           | Verified             |                               |
+| [Cron](https://keda.sh/docs/2.21/scalers/cron/)                                           | Verified             |                               |
+| [GCP Pub/Sub](https://keda.sh/docs/2.21/scalers/gcp-pub-sub/)                             | Verified             |                               |
+| [GCP Stackdriver](https://keda.sh/docs/2.21/scalers/gcp-stackdriver/)                     | Verified             |                               |
+| [Github Runner Scaler](https://keda.sh/docs/2.21/scalers/github-runner/)                  | Verified             |                               |
+| [Prometheus](https://keda.sh/docs/2.21/scalers/prometheus/)                               | Verified             |                               |
+| [RabbitMQ Queue](https://keda.sh/docs/2.21/scalers/rabbitmq-queue/)                       | Verified             |                               |
+| [Redis Lists](https://keda.sh/docs/2.21/scalers/redis-lists/)                             | Verified             |                               |
+| [Temporal](https://keda.sh/docs/2.21/scalers/temporal/)                                   | Verified             |                               |
+| [CPU](https://keda.sh/docs/2.21/scalers/cpu/)                                             | Incompatible         | Scaler is Kubernetes-specific |
+| [Kubernetes Workload](https://keda.sh/docs/2.21/scalers/kubernetes-workload/)             | Incompatible         | Scaler is Kubernetes-specific |
+| [Memory](https://keda.sh/docs/2.21/scalers/memory/)                                       | Incompatible         | Scaler is Kubernetes-specific |
 
-See https://keda.sh/docs/2.20/scalers/ for the full list of KEDA's scalers. The compatibility for any KEDA scaler not listed above is currently unknown. Please file an issue if you believe a scaler does not work.
+See https://keda.sh/docs/2.21/scalers/ for the full list of KEDA's scalers. The compatibility for any KEDA scaler not listed above is currently unknown. Please file an issue if you believe a scaler does not work.
 
 # Setup
 
@@ -176,7 +176,7 @@ CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
 PARAMETER_VERSION=1
 
 CREMA_CONFIG_PARAM_VERSION=projects/$PROJECT_ID/locations/$PARAMETER_REGION/parameters/$PARAMETER_ID/versions/$PARAMETER_VERSION
-IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.2
+IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.3
 
 gcloud run deploy $SERVICE_NAME \
   --image=${IMAGE} \
@@ -255,7 +255,7 @@ Logs are natively parsed by Google Cloud Logging, placing custom fields into `js
 }
 ```
 TIP: Use the following Cloud Logging queries for filtering structured logs:
-- View all CREMA logs: `jsonPayload.component="scaler" OR jsonPayload.message=~"\[METRIC-PROVIDER\]"`
+- View all CREMA logs: `jsonPayload.component="scaler" OR jsonPayload.component="metric-provider"`
 - View scaling events for a specific resource: `jsonPayload.resource="projects/my-project/locations/us-central1/workerpools/my-pool"`
 
 ## Optional: Build the container image from source
@@ -292,7 +292,8 @@ If configured, CREMA will emit the following metrics:
 
 | Release Image Tag | Supported KEDA Version | Release Status / Details |
 |:------------------|:-----------------------|:-------------------------|
-| `1.2`             | `v2.20`                | Upgraded version supporting latest KEDA frameworks. Preferred release tag. |
+| `1.3`             | `v2.21`                | Upgraded version supporting latest KEDA frameworks. Preferred release tag. |
+| `1.2`             | `v2.20`                | Legacy release. This version will no longer receive future updates or bug fixes. |
 | `1.1`             | `v2.19`                | Legacy release. This version will no longer receive future updates or bug fixes. |
 | `1.0`             | `v2.17`                | Legacy release. This version will no longer receive future updates or bug fixes. |
 
