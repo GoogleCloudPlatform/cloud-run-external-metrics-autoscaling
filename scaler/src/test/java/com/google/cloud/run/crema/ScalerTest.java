@@ -15,23 +15,6 @@
  *
  */
 
-/*
- * Copyright 2025 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
 package com.google.cloud.run.crema;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -48,8 +31,6 @@ import static org.mockito.Mockito.when;
 
 import com.google.cloud.run.crema.clients.CloudRunClientWrapper;
 import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.concurrent.ExecutionException;
 import org.junit.Before;
 import org.junit.Test;
@@ -97,13 +78,6 @@ public final class ScalerTest {
   public void setUp() {
     cloudRunClientWrapper = mock(CloudRunClientWrapper.class);
     metricsService = mock(MetricsService.class);
-
-    when(cloudRunClientWrapper.getServiceLastDeploymentTime(
-            SERVICE_NAME, "test-project", "test-location"))
-        .thenReturn(Instant.now().minus(Duration.ofDays(1)));
-    when(cloudRunClientWrapper.getWorkerPoolLastDeploymentTime(
-            WORKERPOOL_NAME, "test-project", "test-location"))
-        .thenReturn(Instant.now().minus(Duration.ofDays(1)));
   }
 
   @Test
@@ -314,34 +288,6 @@ public final class ScalerTest {
     var unused = scaler.scale(scaledObjectMetrics);
 
     verify(metricsService, times(4)).writeMetricIgnoreFailure(any(), anyDouble(), any());
-  }
-
-  @Test
-  public void scale_lastDeploymentIsOldEnough_updatesWorkerPool()
-      throws IOException, ExecutionException, InterruptedException {
-    Scaler scaler =
-        new Scaler(
-            cloudRunClientWrapper, metricsService, MANUAL_SCALING_STATIC_CONFIG, "test-project");
-    ScaledObject scaledObject =
-        ScaledObject.newBuilder()
-            .setScaleTargetRef(
-                ScaleTargetRef.newBuilder().setName(WORKERPOOL_WORKLOAD_NAME).build())
-            .setAdvanced(ADVANCED)
-            .build();
-    when(cloudRunClientWrapper.getWorkerPoolLastDeploymentTime(
-            WORKERPOOL_NAME, "test-project", "test-location"))
-        .thenReturn(Instant.now().minusSeconds(61));
-    Metric metric = Metric.newBuilder().setValue(2000.0).setTargetValue(1000.0).build();
-    ScaledObjectMetrics scaledObjectMetrics =
-        ScaledObjectMetrics.newBuilder().setScaledObject(scaledObject).addMetrics(metric).build();
-    when(cloudRunClientWrapper.getWorkerPoolInstanceCount(
-            WORKERPOOL_NAME, "test-project", "test-location"))
-        .thenReturn(5);
-
-    var unused = scaler.scale(scaledObjectMetrics);
-
-    verify(cloudRunClientWrapper)
-        .updateWorkerPoolManualInstances(WORKERPOOL_NAME, 10, "test-project", "test-location");
   }
 
   @Test

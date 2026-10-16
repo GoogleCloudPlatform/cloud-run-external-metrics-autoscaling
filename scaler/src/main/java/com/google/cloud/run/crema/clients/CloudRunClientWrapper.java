@@ -15,23 +15,6 @@
  *
  */
 
-/*
- * Copyright 2025 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
 package com.google.cloud.run.crema.clients;
 
 import com.google.api.core.ApiFutureCallback;
@@ -55,9 +38,7 @@ import com.google.common.flogger.FluentLogger;
 import com.google.common.flogger.MetadataKey;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.FieldMask;
-import com.google.protobuf.Timestamp;
 import java.io.IOException;
-import java.time.Instant;
 import java.util.concurrent.ExecutionException;
 
 /** Thin wrapper around Cloud Run API */
@@ -94,22 +75,6 @@ public class CloudRunClientWrapper {
       return workerpool.getScaling().getManualInstanceCount();
     }
     return 0;
-  }
-
-  /**
-   * Returns the last deployment time for a given worker pool.
-   *
-   * @param workerpoolName The name of the worker pool.
-   * @return The last deployment time or EPOCH if not set.
-   */
-  public Instant getWorkerPoolLastDeploymentTime(
-      String workerpoolName, String projectId, String region) {
-    WorkerPool workerpool = getWorkerPool(workerpoolName, projectId, region);
-    if (workerpool.hasUpdateTime()) {
-      Timestamp updateTime = workerpool.getUpdateTime();
-      return Instant.ofEpochSecond(updateTime.getSeconds(), updateTime.getNanos());
-    }
-    return Instant.EPOCH;
   }
 
   /**
@@ -168,21 +133,6 @@ public class CloudRunClientWrapper {
       return service.getTemplate().getScaling().getMinInstanceCount();
     }
     return 0;
-  }
-
-  /**
-   * Returns the last deployment time for a given service.
-   *
-   * @param serviceName The name of the service.
-   * @return The last deployment time or EPOCH if not set.
-   */
-  public Instant getServiceLastDeploymentTime(String serviceName, String projectId, String region) {
-    Service service = getService(serviceName, projectId, region);
-    if (service.hasUpdateTime()) {
-      Timestamp updateTime = service.getUpdateTime();
-      return Instant.ofEpochSecond(updateTime.getSeconds(), updateTime.getNanos());
-    }
-    return Instant.EPOCH;
   }
 
   /**

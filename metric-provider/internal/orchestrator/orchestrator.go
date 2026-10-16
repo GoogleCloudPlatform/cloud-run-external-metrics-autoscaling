@@ -12,20 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Copyright 2025 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package orchestrator
 
 import (
@@ -37,7 +23,6 @@ import (
 
 	"github.com/go-logr/logr"
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	"github.com/kedacore/keda/v2/pkg/scaling/cache"
 )
 
 type ScalerClient interface {
@@ -46,11 +31,11 @@ type ScalerClient interface {
 }
 
 type BuilderFactory interface {
-	MakeBuilders(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, asMetricSource bool) ([]cache.ScalerBuilder, error)
+	MakeBuilders(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, asMetricSource bool) ([]scaling.ScalerBuilder, error)
 }
 
 type StateProvider interface {
-	GetScaledObjectState(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, scalerBuilders []cache.ScalerBuilder) (scaling.ScaledObjectState, error)
+	GetScaledObjectState(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, scalerBuilders []scaling.ScalerBuilder) (scaling.ScaledObjectState, error)
 }
 
 // The orchestrator is responsible for retrieving configuration, using it to fetch metrics, and sending the metrics to the scaling system.
@@ -154,7 +139,7 @@ func toMetrics(scaledObjectState scaling.ScaledObjectState) []*pb.Metric {
 	return pbMetrics
 }
 
-func closeScalers(ctx context.Context, logger logr.Logger, builders []cache.ScalerBuilder) {
+func closeScalers(ctx context.Context, logger logr.Logger, builders []scaling.ScalerBuilder) {
 	for _, b := range builders {
 		if b.Scaler == nil {
 			continue

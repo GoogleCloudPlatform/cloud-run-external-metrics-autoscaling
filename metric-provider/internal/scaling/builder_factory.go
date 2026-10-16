@@ -12,20 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Copyright 2025 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package scaling
 
 import (
@@ -41,8 +27,13 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/kedacore/keda/v2/pkg/scalers"
 	"github.com/kedacore/keda/v2/pkg/scalers/scalersconfig"
-	"github.com/kedacore/keda/v2/pkg/scaling/cache"
 )
+
+// ScalerBuilder holds a built KEDA Scaler and its associated configuration.
+type ScalerBuilder struct {
+	Scaler       scalers.Scaler
+	ScalerConfig scalersconfig.ScalerConfig
+}
 
 // BuilderFactory contains the logic for creating ScalerBuilders.
 type BuilderFactory struct {
@@ -62,9 +53,9 @@ func NewBuilderFactory(authResolver *resolvers.AuthResolver, globalHTTPTimeout t
 
 // MakeBuilders returns a list of ScalerBuilders for the specified triggers.
 // This allows the function to attempt to build all scalers and report on the success or failure of each.
-func (bf *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, asMetricSource bool) ([]cache.ScalerBuilder, error) {
+func (bf *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, asMetricSource bool) ([]ScalerBuilder, error) {
 	logger := bf.logger.WithValues("scaleTargetName", scaledObject.Spec.ScaleTargetRef.Name)
-	builders := make([]cache.ScalerBuilder, 0, len(scaledObject.Spec.Triggers))
+	builders := make([]ScalerBuilder, 0, len(scaledObject.Spec.Triggers))
 	resolvedEnv := resolvers.ResolveEnv()
 
 	for i, trigger := range scaledObject.Spec.Triggers {
@@ -116,10 +107,9 @@ func (bf *BuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1
 		if err != nil {
 			logger.Error(err, "Failure while building scalers")
 		} else {
-			builders = append(builders, cache.ScalerBuilder{
+			builders = append(builders, ScalerBuilder{
 				Scaler:       scaler,
 				ScalerConfig: *config,
-				Factory:      factory,
 			})
 		}
 	}
@@ -189,9 +179,6 @@ func buildScaler(ctx context.Context, triggerType string, config *scalersconfig.
 		return scalers.NewEtcdScaler(config)
 	case "external":
 		return scalers.NewExternalScaler(config)
-	// TODO: use other way for test.
-	case "external-mock":
-		return scalers.NewExternalMockScaler(config)
 	case "external-push":
 		return scalers.NewExternalPushScaler(config)
 	case "gcp-cloudtasks":

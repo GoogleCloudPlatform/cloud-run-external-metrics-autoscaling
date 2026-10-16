@@ -12,20 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Copyright 2025 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package orchestrator
 
 import (
@@ -39,7 +25,6 @@ import (
 	pb "crema/metric-provider/proto"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	"github.com/kedacore/keda/v2/pkg/scaling/cache"
 	"github.com/stretchr/testify/mock"
 	v2 "k8s.io/api/autoscaling/v2"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -66,16 +51,16 @@ type MockBuilderFactory struct {
 	mock.Mock
 }
 
-func (m *MockBuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, isGRPC bool) ([]cache.ScalerBuilder, error) {
+func (m *MockBuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, isGRPC bool) ([]scaling.ScalerBuilder, error) {
 	args := m.Called(ctx, scaledObject, triggerAuths, isGRPC)
-	return args.Get(0).([]cache.ScalerBuilder), args.Error(1)
+	return args.Get(0).([]scaling.ScalerBuilder), args.Error(1)
 }
 
 type MockStateProvider struct {
 	mock.Mock
 }
 
-func (m *MockStateProvider) GetScaledObjectState(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, builders []cache.ScalerBuilder) (scaling.ScaledObjectState, error) {
+func (m *MockStateProvider) GetScaledObjectState(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, builders []scaling.ScalerBuilder) (scaling.ScaledObjectState, error) {
 	args := m.Called(ctx, scaledObject, builders)
 	if args.Get(0) == nil {
 		return scaling.ScaledObjectState{}, args.Error(1)
@@ -124,7 +109,7 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 			&logger,
 		)
 
-		builders := []cache.ScalerBuilder{}
+		builders := []scaling.ScalerBuilder{}
 		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(builders, nil)
 
 		scaledObjectState := &scaling.ScaledObjectState{
@@ -224,8 +209,8 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 
 		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.MatchedBy(func(so *kedav1alpha1.ScaledObject) bool {
 			return so.Name == failingScaleTargetRefName
-		}), mock.Anything, mock.Anything).Return([]cache.ScalerBuilder{}, errors.New("MakeBuilders error"))
-		builders := []cache.ScalerBuilder{}
+		}), mock.Anything, mock.Anything).Return([]scaling.ScalerBuilder{}, errors.New("MakeBuilders error"))
+		builders := []scaling.ScalerBuilder{}
 		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.MatchedBy(func(so *kedav1alpha1.ScaledObject) bool {
 			return so.Name == successfulScaleTargetRefName
 		}), mock.Anything, mock.Anything).Return(builders, nil)
@@ -311,7 +296,7 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 
 		orchestrator := New(mockScalerClient, cremaConfig, mockBuilderFactory, mockStateProvider, &logger)
 
-		builders := []cache.ScalerBuilder{}
+		builders := []scaling.ScalerBuilder{}
 		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(builders, nil)
 
 		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.MatchedBy(func(so *kedav1alpha1.ScaledObject) bool {
@@ -388,7 +373,7 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 		}
 
 		orchestrator := New(mockScalerClient, cremaConfig, mockBuilderFactory, mockStateProvider, &logger)
-		builders := []cache.ScalerBuilder{}
+		builders := []scaling.ScalerBuilder{}
 		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(builders, nil)
 
 		scaledObjectState := &scaling.ScaledObjectState{
@@ -447,7 +432,7 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 		)
 
 		mockScaler := new(MockLifecycleScaler)
-		builders := []cache.ScalerBuilder{
+		builders := []scaling.ScalerBuilder{
 			{
 				Scaler: mockScaler,
 			},

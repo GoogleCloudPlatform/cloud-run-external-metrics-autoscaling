@@ -12,20 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Copyright 2025 Google LLC
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package scaling
 
 import (
@@ -37,7 +23,6 @@ import (
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/kedacore/keda/v2/pkg/scalers/scalersconfig"
-	"github.com/kedacore/keda/v2/pkg/scaling/cache"
 	"github.com/stretchr/testify/assert"
 	v2 "k8s.io/api/autoscaling/v2"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -125,14 +110,14 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 
 	testCases := []struct {
 		name                    string
-		builders                []cache.ScalerBuilder
+		builders                []ScalerBuilder
 		expectedIsActive        bool
 		expectedMetricAndTarget []MetricAndTargetValue
 		expectedError           bool
 	}{
 		{
 			name: "one active scaler",
-			builders: []cache.ScalerBuilder{
+			builders: []ScalerBuilder{
 				{
 					Scaler:       &mockScaler{isActive: true, metrics: []external_metrics.ExternalMetricValue{metric1}},
 					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1", TriggerIndex: 0},
@@ -154,7 +139,7 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 		},
 		{
 			name: "one inactive scaler",
-			builders: []cache.ScalerBuilder{
+			builders: []ScalerBuilder{
 				{
 					Scaler:       &mockScaler{isActive: false, metrics: []external_metrics.ExternalMetricValue{metric1}},
 					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1", TriggerIndex: 0},
@@ -176,7 +161,7 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 		},
 		{
 			name: "one scaler with error",
-			builders: []cache.ScalerBuilder{
+			builders: []ScalerBuilder{
 				{
 					Scaler:       &mockScaler{err: errors.New("scaler error")},
 					ScalerConfig: scalersconfig.ScalerConfig{TriggerIndex: 0},
@@ -188,7 +173,7 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 		},
 		{
 			name: "multiple scalers, one active",
-			builders: []cache.ScalerBuilder{
+			builders: []ScalerBuilder{
 				{
 					Scaler:       &mockScaler{isActive: false, metrics: []external_metrics.ExternalMetricValue{metric1}},
 					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1", TriggerIndex: 0},
@@ -223,7 +208,7 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 		},
 		{
 			name: "multiple scalers, one with error",
-			builders: []cache.ScalerBuilder{
+			builders: []ScalerBuilder{
 				{
 					Scaler:       &mockScaler{isActive: true, metrics: []external_metrics.ExternalMetricValue{metric1}},
 					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1", TriggerIndex: 0},
@@ -248,7 +233,7 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 			expectedError: false},
 		{
 			name: "multiple scalers, all inactive",
-			builders: []cache.ScalerBuilder{
+			builders: []ScalerBuilder{
 				{
 					Scaler:       &mockScaler{isActive: false, metrics: []external_metrics.ExternalMetricValue{metric1}},
 					ScalerConfig: scalersconfig.ScalerConfig{TriggerName: "trigger1", TriggerIndex: 0},
@@ -283,7 +268,7 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 		},
 		{
 			name: "multiple scalers, multiple errors",
-			builders: []cache.ScalerBuilder{
+			builders: []ScalerBuilder{
 				{
 					Scaler:       &mockScaler{err: errors.New("scaler error 1")},
 					ScalerConfig: scalersconfig.ScalerConfig{TriggerIndex: 0},

@@ -7,7 +7,6 @@ require (
 	cloud.google.com/go/parametermanager v0.3.1
 	cloud.google.com/go/secretmanager v1.21.0
 	github.com/go-logr/logr v1.4.4
-	github.com/google/go-cmp v0.7.0
 	github.com/kedacore/keda/v2 v2.21.0
 	github.com/stretchr/testify v1.12.1
 	google.golang.org/api v0.298.0
@@ -304,10 +303,5 @@ require (
 
 replace (
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v0.314.0
-	k8s.io/api => k8s.io/api v0.36.4
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.36.4
-	k8s.io/apimachinery => k8s.io/apimachinery v0.36.4
 	k8s.io/client-go => k8s.io/client-go v0.36.4
-	k8s.io/metrics => k8s.io/metrics v0.36.4
-	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.24.1
 )

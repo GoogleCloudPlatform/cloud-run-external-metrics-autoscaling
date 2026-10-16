@@ -15,23 +15,6 @@
  *
  */
 
-/*
- * Copyright 2025 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
 package com.google.cloud.run.crema.clients;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -59,9 +42,7 @@ import com.google.cloud.run.v2.UpdateWorkerPoolRequest;
 import com.google.cloud.run.v2.WorkerPool;
 import com.google.cloud.run.v2.WorkerPoolsClient;
 import com.google.cloud.run.v2.WorkerPoolScaling;
-import com.google.protobuf.Timestamp;
 import java.io.IOException;
-import java.time.Instant;
 import java.util.concurrent.ExecutionException;
 import org.junit.Before;
 import org.junit.Rule;
@@ -253,64 +234,6 @@ public final class CloudRunClientWrapperTest {
 
     assertThat(cloudRunClientWrapper.getServiceInstanceCount(SERVICE_NAME, PROJECT_ID, REGION))
         .isEqualTo(0);
-  }
-
-  @Test
-  public void getServiceLastDeploymentTime_withUpdateTime_returnsInstant() {
-    Instant updateTime = Instant.parse("2025-04-01T18:05:07.879813Z");
-
-    Service service =
-        Service.newBuilder()
-            .setUpdateTime(
-                Timestamp.newBuilder()
-                    .setSeconds(updateTime.getEpochSecond())
-                    .setNanos(updateTime.getNano()))
-            .build();
-    when(servicesClient.getService(getServiceRequestCaptor.capture())).thenReturn(service);
-
-    assertThat(cloudRunClientWrapper.getServiceLastDeploymentTime(SERVICE_NAME, PROJECT_ID, REGION))
-        .isEqualTo(updateTime);
-  }
-
-  @Test
-  public void getServiceLastDeploymentTime_withNullUpdateTime_returnsEpoch() {
-    Service service = Service.newBuilder().build();
-    when(servicesClient.getService(getServiceRequestCaptor.capture())).thenReturn(service);
-
-    assertThat(cloudRunClientWrapper.getServiceLastDeploymentTime(SERVICE_NAME, PROJECT_ID, REGION))
-        .isEqualTo(Instant.EPOCH);
-  }
-
-  @Test
-  public void getWorkerPoolLastDeploymentTime_withUpdateTime_returnsInstant() {
-    Instant updateTime = Instant.parse("2025-04-01T18:05:07.879813Z");
-
-    WorkerPool workerPool =
-        WorkerPool.newBuilder()
-            .setUpdateTime(
-                Timestamp.newBuilder()
-                    .setSeconds(updateTime.getEpochSecond())
-                    .setNanos(updateTime.getNano()))
-            .build();
-    when(workerPoolsClient.getWorkerPool(getWorkerPoolRequestCaptor.capture()))
-        .thenReturn(workerPool);
-
-    assertThat(
-            cloudRunClientWrapper.getWorkerPoolLastDeploymentTime(
-                WORKERPOOL_NAME, PROJECT_ID, REGION))
-        .isEqualTo(updateTime);
-  }
-
-  @Test
-  public void getWorkerPoolLastDeploymentTime_withNullUpdateTime_returnsEpoch() {
-    WorkerPool workerPool = WorkerPool.newBuilder().build();
-    when(workerPoolsClient.getWorkerPool(getWorkerPoolRequestCaptor.capture()))
-        .thenReturn(workerPool);
-
-    assertThat(
-            cloudRunClientWrapper.getWorkerPoolLastDeploymentTime(
-                WORKERPOOL_NAME, PROJECT_ID, REGION))
-        .isEqualTo(Instant.EPOCH);
   }
 
   @Test

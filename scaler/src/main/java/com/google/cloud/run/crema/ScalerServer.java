@@ -15,23 +15,6 @@
  *
  */
 
-/*
- * Copyright 2025 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
 package com.google.cloud.run.crema;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -53,7 +36,6 @@ public class ScalerServer {
 
   private static final int PORT = 50051;
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
-  private static final String APPLICATION_NAME = "Cloud Run External Metrics Autocaler";
 
   private Server server;
   private final HealthStatusManager health;
@@ -146,13 +128,6 @@ public class ScalerServer {
       }
 
       responseObserver.onNext(responseBuilder.build());
-      responseObserver.onCompleted();
-    }
-
-    @Override
-    public void schedule(
-        ScheduleRequest request, StreamObserver<ScheduleResponse> responseObserver) {
-      responseObserver.onNext(ScheduleResponse.getDefaultInstance());
       responseObserver.onCompleted();
     }
   }
