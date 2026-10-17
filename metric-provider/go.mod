@@ -4,12 +4,14 @@ go 1.26.9
 
 require (
 	cloud.google.com/go/logging v1.19.1
+	cloud.google.com/go/monitoring v1.30.0
 	cloud.google.com/go/parametermanager v0.3.1
 	cloud.google.com/go/secretmanager v1.21.0
 	github.com/go-logr/logr v1.4.4
 	github.com/kedacore/keda/v2 v2.21.0
 	github.com/stretchr/testify v1.12.1
 	google.golang.org/api v0.298.0
+	google.golang.org/genproto/googleapis/api v0.0.0-20260904194346-d0f1323225a4
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	k8s.io/api v0.36.4
@@ -27,7 +29,6 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.1 // indirect
 	cloud.google.com/go/iam v1.13.0 // indirect
 	cloud.google.com/go/longrunning v1.2.0 // indirect
-	cloud.google.com/go/monitoring v1.30.0 // indirect
 	cloud.google.com/go/spanner v1.95.1 // indirect
 	cloud.google.com/go/storage v1.68.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
@@ -285,7 +286,6 @@ require (
 	golang.org/x/tools v0.49.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto v0.0.0-20260904194346-d0f1323225a4 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260904194346-d0f1323225a4 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260904194346-d0f1323225a4 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
