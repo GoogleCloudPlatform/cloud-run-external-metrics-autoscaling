@@ -47,6 +47,8 @@ import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutures;
 import com.google.api.gax.longrunning.OperationFuture;
 import com.google.api.gax.longrunning.OperationSnapshot;
+import com.google.api.gax.rpc.AlreadyExistsException;
+import com.google.api.gax.rpc.StatusCode;
 import com.google.cloud.run.v2.GetServiceRequest;
 import com.google.cloud.run.v2.GetWorkerPoolRequest;
 import com.google.cloud.run.v2.RevisionScaling;
@@ -62,7 +64,9 @@ import com.google.cloud.run.v2.WorkerPoolScaling;
 import com.google.protobuf.Timestamp;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -117,6 +121,28 @@ public final class CloudRunClientWrapperTest {
     OperationFuture<T, T> operation = mock(OperationFuture.class);
     ApiFuture<OperationSnapshot> rejected =
         ApiFutures.immediateFailedFuture(new IOException("error"));
+    when(operation.getInitialFuture()).thenReturn(rejected);
+    return operation;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <T> OperationFuture<T, T> mockAlreadyExistsOperation() {
+    OperationFuture<T, T> operation = mock(OperationFuture.class);
+    StatusCode alreadyExists =
+        new StatusCode() {
+          @Override
+          public Code getCode() {
+            return Code.ALREADY_EXISTS;
+          }
+
+          @Override
+          public Object getTransportCode() {
+            return null;
+          }
+        };
+    ApiFuture<OperationSnapshot> rejected =
+        ApiFutures.immediateFailedFuture(
+            new AlreadyExistsException(new IOException("exists"), alreadyExists, false));
     when(operation.getInitialFuture()).thenReturn(rejected);
     return operation;
   }
@@ -388,6 +414,78 @@ public final class CloudRunClientWrapperTest {
         () ->
             cloudRunClientWrapper.updateServiceManualInstances(
                 SERVICE_NAME, 10, PROJECT_ID, REGION));
+  }
+
+  @Test
+  public void updateServiceManualInstances_pinnedRevisionConflict_retriesWithRevisionCleared()
+      throws ExecutionException, InterruptedException {
+    Service service =
+        Service.newBuilder()
+            .setScaling(ServiceScaling.newBuilder().setManualInstanceCount(5))
+            .setTemplate(RevisionTemplate.newBuilder().setRevision("service-name-abc123"))
+            .build();
+    when(servicesClient.getService(any(GetServiceRequest.class))).thenReturn(service);
+
+    OperationFuture<Service, Service> conflict = mockAlreadyExistsOperation();
+    OperationFuture<Service, Service> accepted = mockAcceptedOperation();
+    when(servicesClient.updateServiceAsync(updateServiceRequestCaptor.capture()))
+        .thenReturn(conflict, accepted);
+
+    cloudRunClientWrapper.updateServiceManualInstances(SERVICE_NAME, 10, PROJECT_ID, REGION);
+
+    List<UpdateServiceRequest> requests = updateServiceRequestCaptor.getAllValues();
+    assertThat(requests).hasSize(2);
+    assertThat(requests.get(0).getService().getTemplate().getRevision())
+        .isEqualTo("service-name-abc123");
+    assertThat(requests.get(0).getUpdateMask().getPathsList())
+        .containsExactly("scaling.manual_instance_count");
+    assertThat(requests.get(1).getService().getTemplate().getRevision()).isEmpty();
+    assertThat(requests.get(1).getService().getScaling().getManualInstanceCount()).isEqualTo(10);
+    assertThat(requests.get(1).getUpdateMask().getPathsList())
+        .containsExactly("scaling.manual_instance_count", "template.revision");
+    assertThat(requests.get(1).getService().getTrafficList()).isEmpty();
+    // The rejected first attempt must not log a failure; only the accepted retry is watched.
+    verify(conflict, never()).addListener(any(Runnable.class), any(Executor.class));
+    verify(accepted).addListener(any(Runnable.class), any(Executor.class));
+  }
+
+  @Test
+  public void updateServiceManualInstances_conflictWithoutPinnedRevision_throws() {
+    Service service =
+        Service.newBuilder()
+            .setScaling(ServiceScaling.newBuilder().setManualInstanceCount(5))
+            .build();
+    when(servicesClient.getService(any(GetServiceRequest.class))).thenReturn(service);
+
+    OperationFuture<Service, Service> conflict = mockAlreadyExistsOperation();
+    when(servicesClient.updateServiceAsync(any(UpdateServiceRequest.class))).thenReturn(conflict);
+
+    assertThrows(
+        ExecutionException.class,
+        () ->
+            cloudRunClientWrapper.updateServiceManualInstances(
+                SERVICE_NAME, 10, PROJECT_ID, REGION));
+    verify(servicesClient, times(1)).updateServiceAsync(any(UpdateServiceRequest.class));
+  }
+
+  @Test
+  public void updateServiceManualInstances_pinnedRevisionConflictPersists_throws() {
+    Service service =
+        Service.newBuilder()
+            .setScaling(ServiceScaling.newBuilder().setManualInstanceCount(5))
+            .setTemplate(RevisionTemplate.newBuilder().setRevision("service-name-abc123"))
+            .build();
+    when(servicesClient.getService(any(GetServiceRequest.class))).thenReturn(service);
+
+    OperationFuture<Service, Service> conflict = mockAlreadyExistsOperation();
+    when(servicesClient.updateServiceAsync(any(UpdateServiceRequest.class))).thenReturn(conflict);
+
+    assertThrows(
+        ExecutionException.class,
+        () ->
+            cloudRunClientWrapper.updateServiceManualInstances(
+                SERVICE_NAME, 10, PROJECT_ID, REGION));
+    verify(servicesClient, times(2)).updateServiceAsync(any(UpdateServiceRequest.class));
   }
 
   @Test

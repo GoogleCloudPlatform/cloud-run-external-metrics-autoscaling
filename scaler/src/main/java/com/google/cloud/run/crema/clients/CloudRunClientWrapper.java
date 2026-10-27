@@ -37,6 +37,7 @@ package com.google.cloud.run.crema.clients;
 import com.google.api.core.ApiFutureCallback;
 import com.google.api.core.ApiFutures;
 import com.google.api.gax.longrunning.OperationFuture;
+import com.google.api.gax.rpc.AlreadyExistsException;
 import com.google.cloud.run.v2.GetServiceRequest;
 import com.google.cloud.run.v2.GetWorkerPoolRequest;
 import com.google.cloud.run.v2.RevisionScaling;
@@ -252,15 +253,44 @@ public class CloudRunClientWrapper {
 
     FieldMask updateMask = FieldMask.newBuilder().addPaths("scaling.manual_instance_count").build();
 
+    try {
+      dispatchServiceUpdate(resourceName, serviceToUpdate, updateMask);
+    } catch (ExecutionException e) {
+      if (!isPinnedRevisionConflict(e, serviceToUpdate)) {
+        throw e;
+      }
+      // An external deploy tool (e.g. Cloud Deploy) pinned template.revision to a name whose
+      // configuration differs from what this update implies, so Cloud Run rejects it with
+      // ALREADY_EXISTS. Clearing the name lets Cloud Run generate one. This creates a single new
+      // revision; later updates echo that auto-generated name and no longer conflict. Traffic is
+      // not touched, so rollouts and canaries managed by the deploy tool are unaffected.
+      logger.atInfo().with(RESOURCE, resourceName).log(
+          "Revision name %s is pinned by an external tool; retrying %s with it cleared",
+          serviceToUpdate.getTemplate().getRevision(), resourceName);
+      Service withoutRevision =
+          serviceToUpdate.toBuilder()
+              .setTemplate(serviceToUpdate.getTemplate().toBuilder().clearRevision())
+              .build();
+      FieldMask retryMask = updateMask.toBuilder().addPaths("template.revision").build();
+      dispatchServiceUpdate(resourceName, withoutRevision, retryMask);
+    }
+  }
+
+  private static boolean isPinnedRevisionConflict(ExecutionException e, Service service) {
+    return e.getCause() instanceof AlreadyExistsException
+        && !service.getTemplate().getRevision().isEmpty();
+  }
+
+  private void dispatchServiceUpdate(String resourceName, Service service, FieldMask updateMask)
+      throws ExecutionException, InterruptedException {
     UpdateServiceRequest updateRequest =
-        UpdateServiceRequest.newBuilder()
-            .setService(serviceToUpdate)
-            .setUpdateMask(updateMask)
-            .build();
+        UpdateServiceRequest.newBuilder().setService(service).setUpdateMask(updateMask).build();
 
     OperationFuture<Service, Service> operation = servicesClient.updateServiceAsync(updateRequest);
-    logCompletionAsync(resourceName, operation);
     operation.getInitialFuture().get(); // Wait for acceptance only, not completion
+    // Attached only once accepted, so a rejected request that the caller goes on to retry doesn't
+    // log a failure stack trace for an expected conflict.
+    logCompletionAsync(resourceName, operation);
   }
 
   private <T> void logCompletionAsync(String resourceName, OperationFuture<T, ?> operation) {
