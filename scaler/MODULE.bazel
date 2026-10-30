@@ -44,7 +44,7 @@ maven.install(
         "com.google.code.gson:gson:2.13.2",
         "com.google.flogger:flogger:" + FLOGGER_VERSION,
         "com.google.flogger:flogger-system-backend:" + FLOGGER_VERSION,
-        "com.google.guava:guava:33.5.0-jre",
+        "com.google.guava:guava:33.7.2-jre",
         "com.google.protobuf:protobuf-java:" + PROTOBUF_VERSION,
         "com.google.protobuf:protobuf-java-util:" + PROTOBUF_VERSION,
         "com.google.truth:truth:1.4.5",
