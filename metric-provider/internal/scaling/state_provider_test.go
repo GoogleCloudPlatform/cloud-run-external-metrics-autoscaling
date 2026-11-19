@@ -17,13 +17,14 @@ package scaling
 import (
 	"context"
 	"errors"
+	"reflect"
+	"sort"
 	"testing"
 
 	"crema/metric-provider/internal/logging"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/kedacore/keda/v2/pkg/scalers/scalersconfig"
-	"github.com/stretchr/testify/assert"
 	v2 "k8s.io/api/autoscaling/v2"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -230,7 +231,8 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 					},
 				},
 			},
-			expectedError: false},
+			expectedError: false,
+		},
 		{
 			name: "multiple scalers, all inactive",
 			builders: []ScalerBuilder{
@@ -289,13 +291,24 @@ func TestStateProvider_GetScaledObjectState(t *testing.T) {
 			handler := NewStateProvider(&log)
 			state, err := handler.GetScaledObjectState(context.Background(), scaledObject, tc.builders)
 
-			assert.Equal(t, tc.expectedIsActive, state.IsActive)
-			assert.ElementsMatch(t, tc.expectedMetricAndTarget, state.MetricAndTargetValues)
+			if state.IsActive != tc.expectedIsActive {
+				t.Errorf("IsActive = %v, want %v", state.IsActive, tc.expectedIsActive)
+			}
+
+			gotMetrics := append([]MetricAndTargetValue(nil), state.MetricAndTargetValues...)
+			wantMetrics := append([]MetricAndTargetValue(nil), tc.expectedMetricAndTarget...)
+			sort.Slice(gotMetrics, func(i, j int) bool { return gotMetrics[i].TriggerName < gotMetrics[j].TriggerName })
+			sort.Slice(wantMetrics, func(i, j int) bool { return wantMetrics[i].TriggerName < wantMetrics[j].TriggerName })
+			if len(gotMetrics) != len(wantMetrics) || (len(gotMetrics) > 0 && !reflect.DeepEqual(gotMetrics, wantMetrics)) {
+				t.Errorf("MetricAndTargetValues = %v, want %v", gotMetrics, wantMetrics)
+			}
 
 			if tc.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				}
+			} else if err != nil {
+				t.Errorf("unexpected error: %v", err)
 			}
 		})
 	}

@@ -9,7 +9,6 @@ require (
 	cloud.google.com/go/secretmanager v1.21.0
 	github.com/go-logr/logr v1.4.4
 	github.com/kedacore/keda/v2 v2.21.0
-	github.com/stretchr/testify v1.12.1
 	google.golang.org/api v0.298.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260904194346-d0f1323225a4
 	google.golang.org/protobuf v1.36.12
@@ -231,6 +230,7 @@ require (
 	github.com/spiffe/go-spiffe/v2 v2.8.1 // indirect
 	github.com/spyzhov/ajson v0.9.6 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
+	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect

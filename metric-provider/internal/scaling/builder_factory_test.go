@@ -20,13 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"crema/metric-provider/internal/resolvers"
 	"crema/metric-provider/internal/clients"
 	"crema/metric-provider/internal/logging"
+	"crema/metric-provider/internal/resolvers"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -59,12 +57,15 @@ func TestBuilderFactory_MakeBuilders(t *testing.T) {
 		}
 
 		builders, err := factory.MakeBuilders(context.Background(), scaledObject, nil, false)
-		require.NoError(t, err)
-		require.NotNil(t, builders)
-		require.Len(t, builders, 1)
-
-		scaler := builders[0].Scaler
-		assert.NotNil(t, scaler)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(builders) != 1 {
+			t.Fatalf("len(builders) = %d, want 1", len(builders))
+		}
+		if builders[0].Scaler == nil {
+			t.Errorf("expected non-nil Scaler")
+		}
 	})
 
 	t.Run("unknown scaler type", func(t *testing.T) {
@@ -92,9 +93,15 @@ func TestBuilderFactory_MakeBuilders(t *testing.T) {
 		}
 
 		builders, err := factory.MakeBuilders(context.Background(), scaledObjectWithUnknownScaler, nil, false)
-		assert.Error(t, err)
-		assert.NotNil(t, builders)
-		assert.Len(t, builders, 0)
+		if err == nil {
+			t.Errorf("expected error for unknown scaler type, got nil")
+		}
+		if builders == nil {
+			t.Errorf("expected non-nil builders slice")
+		}
+		if len(builders) != 0 {
+			t.Errorf("len(builders) = %d, want 0", len(builders))
+		}
 	})
 
 	t.Run("successful scaler creation with auth", func(t *testing.T) {
@@ -149,12 +156,17 @@ func TestBuilderFactory_MakeBuilders(t *testing.T) {
 		}
 
 		builders, err := factory.MakeBuilders(context.Background(), scaledObject, triggerAuths, false)
-		require.NoError(t, err)
-		require.NotNil(t, builders)
-		require.Len(t, builders, 1)
-
-		scaler := builders[0].Scaler
-		assert.NotNil(t, scaler)
-		assert.Equal(t, "test-secret-value", builders[0].ScalerConfig.AuthParams["test-param"])
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(builders) != 1 {
+			t.Fatalf("len(builders) = %d, want 1", len(builders))
+		}
+		if builders[0].Scaler == nil {
+			t.Errorf("expected non-nil Scaler")
+		}
+		if got := builders[0].ScalerConfig.AuthParams["test-param"]; got != "test-secret-value" {
+			t.Errorf("AuthParams[test-param] = %q, want %q", got, "test-secret-value")
+		}
 	})
 }

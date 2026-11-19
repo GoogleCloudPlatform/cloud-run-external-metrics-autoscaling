@@ -17,6 +17,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"crema/metric-provider/api"
@@ -24,22 +25,24 @@ import (
 	"crema/metric-provider/internal/scaling"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	"github.com/stretchr/testify/mock"
 	v2 "k8s.io/api/autoscaling/v2"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/metrics/pkg/apis/external_metrics"
 )
 
 type MockScalerServerClient struct {
-	mock.Mock
+	scaleFunc   func(ctx context.Context, req *scaling.ScaleRequest) (*scaling.ScaleResponse, error)
+	scaleCalls  []*scaling.ScaleRequest
+	scaleCalled bool
 }
 
 func (m *MockScalerServerClient) Scale(ctx context.Context, req *scaling.ScaleRequest) (*scaling.ScaleResponse, error) {
-	args := m.Called(ctx, req)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+	m.scaleCalled = true
+	m.scaleCalls = append(m.scaleCalls, req)
+	if m.scaleFunc != nil {
+		return m.scaleFunc(ctx, req)
 	}
-	return args.Get(0).(*scaling.ScaleResponse), args.Error(1)
+	return &scaling.ScaleResponse{}, nil
 }
 
 func (m *MockScalerServerClient) Close() error {
@@ -47,34 +50,34 @@ func (m *MockScalerServerClient) Close() error {
 }
 
 type MockBuilderFactory struct {
-	mock.Mock
+	makeBuildersFunc func(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, isGRPC bool) ([]scaling.ScalerBuilder, error)
 }
 
 func (m *MockBuilderFactory) MakeBuilders(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, isGRPC bool) ([]scaling.ScalerBuilder, error) {
-	args := m.Called(ctx, scaledObject, triggerAuths, isGRPC)
-	return args.Get(0).([]scaling.ScalerBuilder), args.Error(1)
+	if m.makeBuildersFunc != nil {
+		return m.makeBuildersFunc(ctx, scaledObject, triggerAuths, isGRPC)
+	}
+	return nil, nil
 }
 
 type MockStateProvider struct {
-	mock.Mock
+	getScaledObjectStateFunc func(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, builders []scaling.ScalerBuilder) (scaling.ScaledObjectState, error)
 }
 
 func (m *MockStateProvider) GetScaledObjectState(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, builders []scaling.ScalerBuilder) (scaling.ScaledObjectState, error) {
-	args := m.Called(ctx, scaledObject, builders)
-	if args.Get(0) == nil {
-		return scaling.ScaledObjectState{}, args.Error(1)
+	if m.getScaledObjectStateFunc != nil {
+		return m.getScaledObjectStateFunc(ctx, scaledObject, builders)
 	}
-	return args.Get(0).(scaling.ScaledObjectState), args.Error(1)
+	return scaling.ScaledObjectState{}, nil
 }
 
 func TestOrchestrator_RefreshMetrics(t *testing.T) {
 	logger := logging.NewLogger()
 
 	t.Run("should send scale request when metrics are available", func(t *testing.T) {
-
-		mockScalerClient := new(MockScalerServerClient)
-		mockBuilderFactory := new(MockBuilderFactory)
-		mockStateProvider := new(MockStateProvider)
+		mockScalerClient := &MockScalerServerClient{}
+		mockBuilderFactory := &MockBuilderFactory{}
+		mockStateProvider := &MockStateProvider{}
 
 		scaleTargetRefName := "my-workerpool"
 		triggerName := "my-trigger-name"
@@ -109,9 +112,11 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 		)
 
 		builders := []scaling.ScalerBuilder{}
-		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(builders, nil)
+		mockBuilderFactory.makeBuildersFunc = func(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, isGRPC bool) ([]scaling.ScalerBuilder, error) {
+			return builders, nil
+		}
 
-		scaledObjectState := &scaling.ScaledObjectState{
+		scaledObjectState := scaling.ScaledObjectState{
 			MetricAndTargetValues: []scaling.MetricAndTargetValue{
 				{
 					MetricValue: metricValue,
@@ -124,7 +129,9 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 				},
 			},
 		}
-		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.Anything, mock.Anything).Return(*scaledObjectState, nil)
+		mockStateProvider.getScaledObjectStateFunc = func(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, builders []scaling.ScalerBuilder) (scaling.ScaledObjectState, error) {
+			return scaledObjectState, nil
+		}
 
 		targetAvg := 15.0
 		expectedScaleRequest := &scaling.ScaleRequest{
@@ -146,30 +153,36 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 				},
 			},
 		}
-		mockScalerClient.On("Scale", mock.Anything, expectedScaleRequest).Return(&scaling.ScaleResponse{}, nil)
 
-		orchestrator.RefreshMetrics(context.Background())
+		_ = orchestrator.RefreshMetrics(context.Background())
 
-		mockScalerClient.AssertExpectations(t)
+		if len(mockScalerClient.scaleCalls) != 1 {
+			t.Fatalf("expected Scale to be called once, got %d", len(mockScalerClient.scaleCalls))
+		}
+		if !reflect.DeepEqual(mockScalerClient.scaleCalls[0], expectedScaleRequest) {
+			t.Errorf("unexpected ScaleRequest:\ngot:  %+v\nwant: %+v", mockScalerClient.scaleCalls[0], expectedScaleRequest)
+		}
 	})
 
 	t.Run("should not send scale request when there are no metrics", func(t *testing.T) {
-		mockScalerClient := new(MockScalerServerClient)
-		mockBuilderFactory := new(MockBuilderFactory)
-		mockStateProvider := new(MockStateProvider)
+		mockScalerClient := &MockScalerServerClient{}
+		mockBuilderFactory := &MockBuilderFactory{}
+		mockStateProvider := &MockStateProvider{}
 
 		cremaConfig := &api.CremaConfig{}
 
 		orchestrator := New(mockScalerClient, cremaConfig, mockBuilderFactory, mockStateProvider, &logger)
-		orchestrator.RefreshMetrics(context.Background())
+		_ = orchestrator.RefreshMetrics(context.Background())
 
-		mockScalerClient.AssertNotCalled(t, "Scale", mock.Anything, mock.Anything)
+		if mockScalerClient.scaleCalled {
+			t.Errorf("expected Scale not to be called")
+		}
 	})
 
 	t.Run("should continue processing when MakeBuilders fails for one scaled object", func(t *testing.T) {
-		mockScalerClient := new(MockScalerServerClient)
-		mockBuilderFactory := new(MockBuilderFactory)
-		mockStateProvider := new(MockStateProvider)
+		mockScalerClient := &MockScalerServerClient{}
+		mockBuilderFactory := &MockBuilderFactory{}
+		mockStateProvider := &MockStateProvider{}
 
 		successfulScaleTargetRefName := "successful-scaled-object"
 		failingScaleTargetRefName := "failing-scaled-object"
@@ -205,15 +218,14 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 
 		orchestrator := New(mockScalerClient, cremaConfig, mockBuilderFactory, mockStateProvider, &logger)
 
-		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.MatchedBy(func(so *kedav1alpha1.ScaledObject) bool {
-			return so.Name == failingScaleTargetRefName
-		}), mock.Anything, mock.Anything).Return([]scaling.ScalerBuilder{}, errors.New("MakeBuilders error"))
-		builders := []scaling.ScalerBuilder{}
-		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.MatchedBy(func(so *kedav1alpha1.ScaledObject) bool {
-			return so.Name == successfulScaleTargetRefName
-		}), mock.Anything, mock.Anything).Return(builders, nil)
+		mockBuilderFactory.makeBuildersFunc = func(ctx context.Context, so *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, isGRPC bool) ([]scaling.ScalerBuilder, error) {
+			if so.Name == failingScaleTargetRefName {
+				return []scaling.ScalerBuilder{}, errors.New("MakeBuilders error")
+			}
+			return []scaling.ScalerBuilder{}, nil
+		}
 
-		scaledObjectState := &scaling.ScaledObjectState{
+		scaledObjectState := scaling.ScaledObjectState{
 			MetricAndTargetValues: []scaling.MetricAndTargetValue{
 				{
 					MetricValue: metricValue,
@@ -226,7 +238,10 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 				},
 			},
 		}
-		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.Anything, mock.Anything).Return(*scaledObjectState, nil)
+		mockStateProvider.getScaledObjectStateFunc = func(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, builders []scaling.ScalerBuilder) (scaling.ScaledObjectState, error) {
+			return scaledObjectState, nil
+		}
+
 		targetAvg := 15.0
 		expectedScaleRequest := &scaling.ScaleRequest{
 			ScaledObjectMetrics: []*scaling.ScaledObjectMetrics{
@@ -247,17 +262,21 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 				},
 			},
 		}
-		mockScalerClient.On("Scale", mock.Anything, expectedScaleRequest).Return(&scaling.ScaleResponse{}, nil)
 
-		orchestrator.RefreshMetrics(context.Background())
+		_ = orchestrator.RefreshMetrics(context.Background())
 
-		mockScalerClient.AssertExpectations(t)
+		if len(mockScalerClient.scaleCalls) != 1 {
+			t.Fatalf("expected Scale to be called once, got %d", len(mockScalerClient.scaleCalls))
+		}
+		if !reflect.DeepEqual(mockScalerClient.scaleCalls[0], expectedScaleRequest) {
+			t.Errorf("unexpected ScaleRequest:\ngot:  %+v\nwant: %+v", mockScalerClient.scaleCalls[0], expectedScaleRequest)
+		}
 	})
 
 	t.Run("should continue processing when GetScaledObjectState fails for one scaled object", func(t *testing.T) {
-		mockScalerClient := new(MockScalerServerClient)
-		mockBuilderFactory := new(MockBuilderFactory)
-		mockStateProvider := new(MockStateProvider)
+		mockScalerClient := &MockScalerServerClient{}
+		mockBuilderFactory := &MockBuilderFactory{}
+		mockStateProvider := &MockStateProvider{}
 
 		successfulScaleTargetRefName := "successful-scaled-object"
 		failingScaleTargetRefName := "failing-scaled-object"
@@ -293,14 +312,11 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 
 		orchestrator := New(mockScalerClient, cremaConfig, mockBuilderFactory, mockStateProvider, &logger)
 
-		builders := []scaling.ScalerBuilder{}
-		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(builders, nil)
+		mockBuilderFactory.makeBuildersFunc = func(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, isGRPC bool) ([]scaling.ScalerBuilder, error) {
+			return []scaling.ScalerBuilder{}, nil
+		}
 
-		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.MatchedBy(func(so *kedav1alpha1.ScaledObject) bool {
-			return so.Name == failingScaleTargetRefName
-		}), mock.Anything).Return(nil, errors.New("GetScaledObjectState error"))
-
-		scaledObjectState := &scaling.ScaledObjectState{
+		scaledObjectState := scaling.ScaledObjectState{
 			MetricAndTargetValues: []scaling.MetricAndTargetValue{
 				{
 					MetricValue: float64(10),
@@ -313,9 +329,12 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 				},
 			},
 		}
-		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.MatchedBy(func(so *kedav1alpha1.ScaledObject) bool {
-			return so.Name == successfulScaleTargetRefName
-		}), mock.Anything).Return(*scaledObjectState, nil)
+		mockStateProvider.getScaledObjectStateFunc = func(ctx context.Context, so *kedav1alpha1.ScaledObject, builders []scaling.ScalerBuilder) (scaling.ScaledObjectState, error) {
+			if so.Name == failingScaleTargetRefName {
+				return scaling.ScaledObjectState{}, errors.New("GetScaledObjectState error")
+			}
+			return scaledObjectState, nil
+		}
 
 		targetAvg := 15.0
 		expectedScaleRequest := &scaling.ScaleRequest{
@@ -337,17 +356,45 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 				},
 			},
 		}
-		mockScalerClient.On("Scale", mock.Anything, expectedScaleRequest).Return(&scaling.ScaleResponse{}, nil)
 
-		orchestrator.RefreshMetrics(context.Background())
+		_ = orchestrator.RefreshMetrics(context.Background())
 
-		mockScalerClient.AssertExpectations(t)
+		if len(mockScalerClient.scaleCalls) != 1 {
+			t.Fatalf("expected Scale to be called once, got %d", len(mockScalerClient.scaleCalls))
+		}
+		if !reflect.DeepEqual(mockScalerClient.scaleCalls[0], expectedScaleRequest) {
+			t.Errorf("unexpected ScaleRequest:\ngot:  %+v\nwant: %+v", mockScalerClient.scaleCalls[0], expectedScaleRequest)
+		}
 	})
 
 	t.Run("should log error when scale request fails", func(t *testing.T) {
-		mockScalerClient := new(MockScalerServerClient)
-		mockBuilderFactory := new(MockBuilderFactory)
-		mockStateProvider := new(MockStateProvider)
+		mockScalerClient := &MockScalerServerClient{
+			scaleFunc: func(ctx context.Context, req *scaling.ScaleRequest) (*scaling.ScaleResponse, error) {
+				return nil, errors.New("Scale error")
+			},
+		}
+		mockBuilderFactory := &MockBuilderFactory{
+			makeBuildersFunc: func(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, isGRPC bool) ([]scaling.ScalerBuilder, error) {
+				return []scaling.ScalerBuilder{}, nil
+			},
+		}
+		mockStateProvider := &MockStateProvider{
+			getScaledObjectStateFunc: func(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, builders []scaling.ScalerBuilder) (scaling.ScaledObjectState, error) {
+				return scaling.ScaledObjectState{
+					MetricAndTargetValues: []scaling.MetricAndTargetValue{
+						{
+							MetricValue: 10.0,
+							TargetValue: v2.MetricTarget{
+								Type:         v2.AverageValueMetricType,
+								AverageValue: resource.NewQuantity(15, resource.DecimalSI),
+							},
+							TriggerName: "test-trigger",
+							TriggerType: "test-trigger-type",
+						},
+					},
+				}, nil
+			},
+		}
 
 		cremaConfig := &api.CremaConfig{
 			Spec: api.CremaConfigSpec{
@@ -369,36 +416,20 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 		}
 
 		orchestrator := New(mockScalerClient, cremaConfig, mockBuilderFactory, mockStateProvider, &logger)
-		builders := []scaling.ScalerBuilder{}
-		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(builders, nil)
-
-		scaledObjectState := &scaling.ScaledObjectState{
-			MetricAndTargetValues: []scaling.MetricAndTargetValue{
-				{
-					MetricValue: 10.0, TargetValue: v2.MetricTarget{
-						Type:         v2.AverageValueMetricType,
-						AverageValue: resource.NewQuantity(15, resource.DecimalSI),
-					},
-					TriggerName: "test-trigger",
-					TriggerType: "test-trigger-type",
-				},
-			},
-		}
-		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.Anything, mock.Anything).Return(*scaledObjectState, nil)
-		mockScalerClient.On("Scale", mock.Anything, mock.Anything).Return(nil, errors.New("Scale error"))
 
 		err := orchestrator.RefreshMetrics(context.Background())
 		if err == nil {
 			t.Errorf("Expected an error from RefreshMetrics, got nil")
 		}
-
-		mockScalerClient.AssertExpectations(t)
+		if !mockScalerClient.scaleCalled {
+			t.Errorf("Expected Scale to be called")
+		}
 	})
 
 	t.Run("should close all generated scalers upon cycle completion", func(t *testing.T) {
-		mockScalerClient := new(MockScalerServerClient)
-		mockBuilderFactory := new(MockBuilderFactory)
-		mockStateProvider := new(MockStateProvider)
+		mockScalerClient := &MockScalerServerClient{}
+		mockBuilderFactory := &MockBuilderFactory{}
+		mockStateProvider := &MockStateProvider{}
 
 		cremaConfig := &api.CremaConfig{
 			Spec: api.CremaConfigSpec{
@@ -427,15 +458,17 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 			&logger,
 		)
 
-		mockScaler := new(MockLifecycleScaler)
+		mockScaler := &MockLifecycleScaler{}
 		builders := []scaling.ScalerBuilder{
 			{
 				Scaler: mockScaler,
 			},
 		}
-		mockBuilderFactory.On("MakeBuilders", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(builders, nil)
+		mockBuilderFactory.makeBuildersFunc = func(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, triggerAuths []api.TriggerAuthentication, isGRPC bool) ([]scaling.ScalerBuilder, error) {
+			return builders, nil
+		}
 
-		scaledObjectState := &scaling.ScaledObjectState{
+		scaledObjectState := scaling.ScaledObjectState{
 			MetricAndTargetValues: []scaling.MetricAndTargetValue{
 				{
 					MetricValue: 10.0,
@@ -448,33 +481,31 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 				},
 			},
 		}
-		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.Anything, mock.Anything).Return(*scaledObjectState, nil)
-
-		mockScalerClient.On("Scale", mock.Anything, mock.Anything).Return(&scaling.ScaleResponse{}, nil)
-		mockScaler.On("Close", mock.Anything).Return(nil)
+		mockStateProvider.getScaledObjectStateFunc = func(ctx context.Context, scaledObject *kedav1alpha1.ScaledObject, builders []scaling.ScalerBuilder) (scaling.ScaledObjectState, error) {
+			return scaledObjectState, nil
+		}
 
 		_ = orchestrator.RefreshMetrics(context.Background())
 
-		mockScaler.AssertExpectations(t)
+		if !mockScaler.closeCalled {
+			t.Errorf("expected scaler.Close to be called")
+		}
 	})
 }
 
 type MockLifecycleScaler struct {
-	mock.Mock
+	closeCalled bool
 }
 
 func (m *MockLifecycleScaler) GetMetricsAndActivity(ctx context.Context, metricName string) ([]external_metrics.ExternalMetricValue, bool, error) {
-	args := m.Called(ctx, metricName)
-	return nil, false, args.Error(0)
+	return nil, false, nil
 }
 
 func (m *MockLifecycleScaler) GetMetricSpecForScaling(ctx context.Context) []v2.MetricSpec {
-	m.Called(ctx)
 	return nil
 }
 
 func (m *MockLifecycleScaler) Close(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
+	m.closeCalled = true
+	return nil
 }
-

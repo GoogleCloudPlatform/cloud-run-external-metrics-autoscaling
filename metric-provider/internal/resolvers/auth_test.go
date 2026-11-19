@@ -19,10 +19,10 @@ import (
 	"crema/metric-provider/api"
 	"crema/metric-provider/internal/clients"
 	"errors"
+	"reflect"
 	"testing"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -39,20 +39,20 @@ func TestAuthResolver_ResolveAuthRefAndPodIdentity(t *testing.T) {
 		expectedErr         error
 	}{
 		{
-			name:            "nil trigger auths",
-			triggerAuths:    nil,
-			triggerAuthName: "test-auth",
-			expected:        nil,
+			name:                "nil trigger auths",
+			triggerAuths:        nil,
+			triggerAuthName:     "test-auth",
+			expected:            nil,
 			expectedPodIdentity: kedav1alpha1.AuthPodIdentity{Provider: kedav1alpha1.PodIdentityProviderNone},
-			expectedErr:     errors.New(""),
+			expectedErr:         errors.New(""),
 		},
 		{
-			name:            "no matching trigger auth",
-			triggerAuths:    []api.TriggerAuthentication{},
-			triggerAuthName: "test-auth",
-			expected:        nil,
+			name:                "no matching trigger auth",
+			triggerAuths:        []api.TriggerAuthentication{},
+			triggerAuthName:     "test-auth",
+			expected:            nil,
 			expectedPodIdentity: kedav1alpha1.AuthPodIdentity{Provider: kedav1alpha1.PodIdentityProviderNone},
-			expectedErr:     errors.New(""),
+			expectedErr:         errors.New(""),
 		},
 		{
 			name: "matching trigger auth found",
@@ -79,7 +79,7 @@ func TestAuthResolver_ResolveAuthRefAndPodIdentity(t *testing.T) {
 				"param1": "value1",
 			},
 			expectedPodIdentity: kedav1alpha1.AuthPodIdentity{Provider: kedav1alpha1.PodIdentityProviderNone},
-			expectedErr: nil,
+			expectedErr:         nil,
 		},
 		{
 			name: "matching trigger auth with pod identity",
@@ -96,10 +96,10 @@ func TestAuthResolver_ResolveAuthRefAndPodIdentity(t *testing.T) {
 					},
 				},
 			},
-			triggerAuthName: "test-auth",
-			expected:        map[string]string{},
+			triggerAuthName:     "test-auth",
+			expected:            map[string]string{},
 			expectedPodIdentity: kedav1alpha1.AuthPodIdentity{Provider: kedav1alpha1.PodIdentityProviderGCP},
-			expectedErr:     nil,
+			expectedErr:         nil,
 		},
 		{
 			name: "one secret fails to resolve",
@@ -123,10 +123,10 @@ func TestAuthResolver_ResolveAuthRefAndPodIdentity(t *testing.T) {
 					},
 				},
 			},
-			triggerAuthName: "test-auth",
-			expected:        nil,
+			triggerAuthName:     "test-auth",
+			expected:            nil,
 			expectedPodIdentity: kedav1alpha1.AuthPodIdentity{Provider: kedav1alpha1.PodIdentityProviderNone},
-			expectedErr:     errors.New(""),
+			expectedErr:         errors.New(""),
 		},
 	}
 
@@ -143,8 +143,12 @@ func TestAuthResolver_ResolveAuthRefAndPodIdentity(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			assert.Equal(t, tc.expected, result)
-			assert.Equal(t, tc.expectedPodIdentity, podIdentity)
+			if !reflect.DeepEqual(result, tc.expected) {
+				t.Errorf("result = %v, want %v", result, tc.expected)
+			}
+			if !reflect.DeepEqual(podIdentity, tc.expectedPodIdentity) {
+				t.Errorf("podIdentity = %v, want %v", podIdentity, tc.expectedPodIdentity)
+			}
 		})
 	}
 }
@@ -203,7 +207,9 @@ func TestAuthResolver_resolveAuthParams(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			assert.Equal(t, tc.expected, result)
+			if !reflect.DeepEqual(result, tc.expected) {
+				t.Errorf("result = %v, want %v", result, tc.expected)
+			}
 		})
 	}
 }
