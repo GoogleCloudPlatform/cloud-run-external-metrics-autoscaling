@@ -28,13 +28,13 @@ variable "crema_config" {
 variable "image" {
   type        = string
   description = "The CREMA container image to deploy."
-  default     = "us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.3"
+  default     = "us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.4"
 }
 
 variable "base_image" {
   type        = string
-  description = "The base image to use for automatic base image updates."
-  default     = "us-central1-docker.pkg.dev/serverless-runtimes/google-24/runtimes/java25"
+  description = "The base image to use for automatic base image updates. Releases 1.3 and earlier need us-central1-docker.pkg.dev/serverless-runtimes/google-24/runtimes/java25."
+  default     = "us-central1-docker.pkg.dev/serverless-runtimes/google-24/runtimes/osonly24"
 }
 
 variable "output_scaler_metrics" {

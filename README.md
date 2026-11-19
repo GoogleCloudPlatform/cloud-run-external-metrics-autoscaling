@@ -158,7 +158,7 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 We recommend deploying CREMA using Cloud Run's pre-built container image in `us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler`. Review details in the [Image Versioning](#image-versioning) reference section below.
 
-However, you can optionally build the container image yourself from source code using Cloud Build (see [instructions](#optional-build-the-container-image-from-source) below), subject to a 30+ minute build process.
+However, you can optionally build the container image yourself from source code using Cloud Build (see [instructions](#optional-build-the-container-image-from-source) below).
 
 The command here deploys CREMA as a Cloud Run service using the pre-built container image; if you want to deploy your own built container image, update the IMAGE variable to specify it.
 
@@ -176,12 +176,12 @@ CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
 PARAMETER_VERSION=1
 
 CREMA_CONFIG_PARAM_VERSION=projects/$PROJECT_ID/locations/$PARAMETER_REGION/parameters/$PARAMETER_ID/versions/$PARAMETER_VERSION
-IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.3
+IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.4
 
 gcloud run deploy $SERVICE_NAME \
   --image=${IMAGE} \
   --region=${SERVICE_REGION} \
-  --base-image=${BASE_IMAGE_REGION}-docker.pkg.dev/serverless-runtimes/google-24/runtimes/java25 \
+  --base-image=${BASE_IMAGE_REGION}-docker.pkg.dev/serverless-runtimes/google-24/runtimes/osonly24 \
   --service-account="${CREMA_SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
   --no-allow-unauthenticated \
   --no-cpu-throttling \
@@ -191,6 +191,8 @@ gcloud run deploy $SERVICE_NAME \
 ```
 
 Note: The container is built using `FROM scratch` to support [automatic base image updates](https://cloud.google.com/run/docs/configuring/services/automatic-base-image-updates). Although matching the base image region to the service region is ideal, it's not strictly required as Cloud Run does not provide base images in all Cloud Run regions.
+
+Note: From release `1.4` on, CREMA is a single Go binary and uses the OS-only base image (`osonly24`). Releases `1.3` and earlier include a Java scaler and need the `java25` base image instead (`${BASE_IMAGE_REGION}-docker.pkg.dev/serverless-runtimes/google-24/runtimes/java25`). A deployment that already uses the `java25` base image keeps working when it moves to `1.4`.
 
 The following environment variables are checked by the container:
 - `CREMA_CONFIG`: Required. The fully qualified name (FQN) of the parameter version which contains your CREMA config.
@@ -260,7 +262,7 @@ TIP: Use the following Cloud Logging queries for filtering structured logs:
 
 ## Optional: Build the container image from source
 
-Follow the steps below to build the CREMA container image yourself. The resulting container image will be pushed to Artifact Registry. Note that this build typically takes 30+ minutes.
+Follow the steps below to build the CREMA container image yourself. The resulting container image will be pushed to Artifact Registry.
 
 Create an Artifact Registry repository to store the CREMA container image if you don't already have one:
 
@@ -292,7 +294,8 @@ If configured, CREMA will emit the following metrics:
 
 | Release Image Tag | Supported KEDA Version | Release Status / Details |
 |:------------------|:-----------------------|:-------------------------|
-| `1.3`             | `v2.21`                | Upgraded version supporting latest KEDA frameworks. Preferred release tag. |
+| `1.4`             | `v2.21`                | The scaler is part of the Go binary; uses the OS-only base image. Preferred release tag. |
+| `1.3`             | `v2.21`                | Last release that includes the Java scaler; needs the `java25` base image. |
 | `1.2`             | `v2.20`                | Legacy release. This version will no longer receive future updates or bug fixes. |
 | `1.1`             | `v2.19`                | Legacy release. This version will no longer receive future updates or bug fixes. |
 | `1.0`             | `v2.17`                | Legacy release. This version will no longer receive future updates or bug fixes. |
