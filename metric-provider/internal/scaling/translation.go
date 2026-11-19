@@ -16,17 +16,11 @@ package scaling
 
 import (
 	"crema/metric-provider/api"
-	pb "crema/metric-provider/proto"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	v2 "k8s.io/api/autoscaling/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// There are 3 different data types involved in CREMA:
-// - CREMA config: The configuration API that CREMA reads; contains a collection of KEDA's ScaledObject
-// - KEDA scaled object: the configuration that's passed to KEDA's scalers
-// - Scaler protobuf: the data communication between metric provider and scaler containers
 
 // ToKedaScaledObjects converts from CREMA config to a collection of KEDA scaled objects
 func ToKedaScaledObjects(cremaConfig *api.CremaConfig) []kedav1alpha1.ScaledObject {
@@ -54,105 +48,103 @@ func ToKedaScaledObjects(cremaConfig *api.CremaConfig) []kedav1alpha1.ScaledObje
 }
 
 // PopulateTargetValue populates the appropriate target in cremaMetric based on the provided KEDA target
-func PopulateTargetValue(kedaTarget v2.MetricTarget, cremaMetric *pb.Metric) {
+func PopulateTargetValue(kedaTarget v2.MetricTarget, cremaMetric *Metric) {
 	if kedaTarget.Type == v2.AverageValueMetricType {
 		targetValue := kedaTarget.AverageValue.AsApproximateFloat64()
-		cremaMetric.Target = &pb.Metric_TargetAverageValue{
-			TargetAverageValue: targetValue,
-		}
+		cremaMetric.TargetAverageValue = &targetValue
+		cremaMetric.TargetValue = nil
 		return
 	}
 
 	targetValue := kedaTarget.Value.AsApproximateFloat64()
-	cremaMetric.Target = &pb.Metric_TargetValue{
-		TargetValue: targetValue,
-	}
+	cremaMetric.TargetValue = &targetValue
+	cremaMetric.TargetAverageValue = nil
 }
 
-// ToPbScaledObject Converts from KEDA scaled object to scaled object protobuf
-func ToPbScaledObject(kedaScaledObjectSpec kedav1alpha1.ScaledObjectSpec) *pb.ScaledObject {
-	pbScaledObject := &pb.ScaledObject{
-		ScaleTargetRef: &pb.ScaleTargetRef{
+// ToScaledObject converts from KEDA scaled object spec to internal ScaledObject struct
+func ToScaledObject(kedaScaledObjectSpec kedav1alpha1.ScaledObjectSpec) *ScaledObject {
+	scaledObject := &ScaledObject{
+		ScaleTargetRef: &ScaleTargetRef{
 			Name: kedaScaledObjectSpec.ScaleTargetRef.Name,
 		},
 	}
 
 	if kedaScaledObjectSpec.Advanced != nil && kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig != nil && kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior != nil {
-		pbScaledObject.Advanced = &pb.Advanced{
-			ScalerConfig: &pb.Advanced_ScalerConfig{
-				Behavior: &pb.Advanced_ScalerConfig_Behavior{},
+		scaledObject.Advanced = &Advanced{
+			ScalerConfig: &ScalerConfig{
+				Behavior: &Behavior{},
 			},
 		}
 
 		if kedaScaledObjectSpec.MinReplicaCount != nil {
-			pbScaledObject.Advanced.ScalerConfig.MinInstances = *kedaScaledObjectSpec.MinReplicaCount
+			scaledObject.Advanced.ScalerConfig.MinInstances = *kedaScaledObjectSpec.MinReplicaCount
 		}
 		if kedaScaledObjectSpec.MaxReplicaCount != nil {
-			pbScaledObject.Advanced.ScalerConfig.MaxInstances = *kedaScaledObjectSpec.MaxReplicaCount
+			scaledObject.Advanced.ScalerConfig.MaxInstances = *kedaScaledObjectSpec.MaxReplicaCount
 		}
 
 		if kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleDown != nil {
-			pbScaledObject.Advanced.ScalerConfig.Behavior.ScaleDown = &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				SelectPolicy: *toPbSelectPolicy(kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleDown.SelectPolicy),
+			scaledObject.Advanced.ScalerConfig.Behavior.ScaleDown = &ScalingRules{
+				SelectPolicy: *toSelectPolicy(kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleDown.SelectPolicy),
 			}
 			if kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleDown.StabilizationWindowSeconds != nil {
-				pbScaledObject.Advanced.ScalerConfig.Behavior.ScaleDown.StabilizationWindowSeconds = *kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleDown.StabilizationWindowSeconds
+				scaledObject.Advanced.ScalerConfig.Behavior.ScaleDown.StabilizationWindowSeconds = *kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleDown.StabilizationWindowSeconds
 			}
 			for _, policy := range kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleDown.Policies {
-				pbPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{
-					Type:          *toPbScalingPolicyType(policy.Type),
+				p := &Policy{
+					Type:          *toScalingPolicyType(policy.Type),
 					Value:         policy.Value,
 					PeriodSeconds: policy.PeriodSeconds,
 				}
-				pbScaledObject.Advanced.ScalerConfig.Behavior.ScaleDown.Policies = append(pbScaledObject.Advanced.ScalerConfig.Behavior.ScaleDown.Policies, pbPolicy)
+				scaledObject.Advanced.ScalerConfig.Behavior.ScaleDown.Policies = append(scaledObject.Advanced.ScalerConfig.Behavior.ScaleDown.Policies, p)
 			}
 		}
 
 		if kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleUp != nil {
-			pbScaledObject.Advanced.ScalerConfig.Behavior.ScaleUp = &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				SelectPolicy: *toPbSelectPolicy(kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleUp.SelectPolicy),
+			scaledObject.Advanced.ScalerConfig.Behavior.ScaleUp = &ScalingRules{
+				SelectPolicy: *toSelectPolicy(kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleUp.SelectPolicy),
 			}
 			if kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleUp.StabilizationWindowSeconds != nil {
-				pbScaledObject.Advanced.ScalerConfig.Behavior.ScaleUp.StabilizationWindowSeconds = *kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleUp.StabilizationWindowSeconds
+				scaledObject.Advanced.ScalerConfig.Behavior.ScaleUp.StabilizationWindowSeconds = *kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleUp.StabilizationWindowSeconds
 			}
 			for _, policy := range kedaScaledObjectSpec.Advanced.HorizontalPodAutoscalerConfig.Behavior.ScaleUp.Policies {
-				pbPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{
-					Type:          *toPbScalingPolicyType(policy.Type),
+				p := &Policy{
+					Type:          *toScalingPolicyType(policy.Type),
 					Value:         policy.Value,
 					PeriodSeconds: policy.PeriodSeconds,
 				}
-				pbScaledObject.Advanced.ScalerConfig.Behavior.ScaleUp.Policies = append(pbScaledObject.Advanced.ScalerConfig.Behavior.ScaleUp.Policies, pbPolicy)
+				scaledObject.Advanced.ScalerConfig.Behavior.ScaleUp.Policies = append(scaledObject.Advanced.ScalerConfig.Behavior.ScaleUp.Policies, p)
 			}
 		}
 	}
 
-	return pbScaledObject
+	return scaledObject
 }
 
-func toPbScalingPolicyType(kedaPolicyType v2.HPAScalingPolicyType) *pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_Type {
-	var pbPolicyType pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_Type
+func toScalingPolicyType(kedaPolicyType v2.HPAScalingPolicyType) *PolicyType {
+	var policyType PolicyType
 	switch kedaPolicyType {
 	case v2.PodsScalingPolicy:
-		pbPolicyType = pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES
+		policyType = PolicyTypeInstances
 	case v2.PercentScalingPolicy:
-		pbPolicyType = pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT
+		policyType = PolicyTypePercent
 	default:
-		pbPolicyType = pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_TYPE_UNSPECIFIED
+		policyType = PolicyTypeUnspecified
 	}
-	return &pbPolicyType
+	return &policyType
 }
 
-func toPbSelectPolicy(kedaSelectPolicy *v2.ScalingPolicySelect) *pb.Advanced_ScalerConfig_Behavior_Scaling_SelectPolicy {
-	pbSelectPolicy := pb.Advanced_ScalerConfig_Behavior_Scaling_MAX
+func toSelectPolicy(kedaSelectPolicy *v2.ScalingPolicySelect) *SelectPolicy {
+	selectPolicy := SelectPolicyMax
 	if kedaSelectPolicy != nil {
 		switch *kedaSelectPolicy {
 		case v2.MinChangePolicySelect:
-			pbSelectPolicy = pb.Advanced_ScalerConfig_Behavior_Scaling_MIN
+			selectPolicy = SelectPolicyMin
 		case v2.DisabledPolicySelect:
-			pbSelectPolicy = pb.Advanced_ScalerConfig_Behavior_Scaling_DISABLED
+			selectPolicy = SelectPolicyDisabled
 		default:
 			// Do nothing. An Unspecified select policy is MAX by default for consistency with k8s
 		}
 	}
-	return &pbSelectPolicy
+	return &selectPolicy
 }

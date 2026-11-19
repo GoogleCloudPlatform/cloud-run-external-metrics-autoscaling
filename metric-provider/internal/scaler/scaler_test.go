@@ -19,7 +19,7 @@ import (
 	"errors"
 	"testing"
 
-	pb "crema/metric-provider/proto"
+	"crema/metric-provider/internal/scaling"
 
 	"github.com/go-logr/logr"
 )
@@ -33,14 +33,16 @@ func (m *mockMetricWriter) WriteMetricIgnoreFailure(ctx context.Context, metricN
 	return nil
 }
 
-func defaultAdvanced() *pb.Advanced {
-	return &pb.Advanced{
-		ScalerConfig: &pb.Advanced_ScalerConfig{
+func floatPtr(v float64) *float64 { return &v }
+
+func defaultAdvanced() *scaling.Advanced {
+	return &scaling.Advanced{
+		ScalerConfig: &scaling.ScalerConfig{
 			MinInstances: 0,
 			MaxInstances: 100,
-			Behavior: &pb.Advanced_ScalerConfig_Behavior{
-				ScaleUp:   &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 0},
-				ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 0},
+			Behavior: &scaling.Behavior{
+				ScaleUp:   &scaling.ScalingRules{StabilizationWindowSeconds: 0},
+				ScaleDown: &scaling.ScalingRules{StabilizationWindowSeconds: 0},
 			},
 		},
 	}
@@ -64,9 +66,9 @@ func TestScaler(t *testing.T) {
 
 	t.Run("scale_minInstancesForWorkerPool_returnsError", func(t *testing.T) {
 		s := NewScaler(&mockCloudRunClient{}, &mockMetricWriter{}, autoScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: workerpoolWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: workerpoolWorkloadName},
 			},
 		}
 		if _, err := s.Scale(ctx, som); err == nil {
@@ -81,9 +83,9 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, manualScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
 			},
 		}
 		if _, err := s.Scale(ctx, som); err == nil {
@@ -101,9 +103,9 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, manualScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: workerpoolWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: workerpoolWorkloadName},
 			},
 		}
 		if _, err := s.Scale(ctx, som); err == nil {
@@ -121,14 +123,14 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, manualScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
 				Advanced:       defaultAdvanced(),
 			},
 		}
 		status, err := s.Scale(ctx, som)
-		if err != nil || status != pb.ScalingStatus_SUCCEEDED {
+		if err != nil || status != scaling.ScalingStatusSucceeded {
 			t.Fatalf("unexpected status=%v, err=%v", status, err)
 		}
 		if len(crClient.updateServiceManualInstancesCalls) != 1 || crClient.updateServiceManualInstancesCalls[0].instances != 0 {
@@ -143,15 +145,15 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, manualScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
 				Advanced:       defaultAdvanced(),
 			},
-			Metrics: []*pb.Metric{{Value: 2000.0, Target: &pb.Metric_TargetValue{TargetValue: 1000.0}}},
+			Metrics: []*scaling.Metric{{Value: 2000.0, TargetValue: floatPtr(1000.0)}},
 		}
 		status, err := s.Scale(ctx, som)
-		if err != nil || status != pb.ScalingStatus_SUCCEEDED {
+		if err != nil || status != scaling.ScalingStatusSucceeded {
 			t.Fatalf("unexpected status=%v, err=%v", status, err)
 		}
 		if len(crClient.updateServiceManualInstancesCalls) != 1 || crClient.updateServiceManualInstancesCalls[0].instances != 10 {
@@ -166,15 +168,15 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, manualScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: workerpoolWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: workerpoolWorkloadName},
 				Advanced:       defaultAdvanced(),
 			},
-			Metrics: []*pb.Metric{{Value: 2000.0, Target: &pb.Metric_TargetValue{TargetValue: 1000.0}}},
+			Metrics: []*scaling.Metric{{Value: 2000.0, TargetValue: floatPtr(1000.0)}},
 		}
 		status, err := s.Scale(ctx, som)
-		if err != nil || status != pb.ScalingStatus_SUCCEEDED {
+		if err != nil || status != scaling.ScalingStatusSucceeded {
 			t.Fatalf("unexpected status=%v, err=%v", status, err)
 		}
 		if len(crClient.updateWorkerPoolManualInstancesCalls) != 1 || crClient.updateWorkerPoolManualInstancesCalls[0].instances != 10 {
@@ -189,15 +191,15 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, autoScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
 				Advanced:       defaultAdvanced(),
 			},
-			Metrics: []*pb.Metric{{Value: 2000.0, Target: &pb.Metric_TargetValue{TargetValue: 1000.0}}},
+			Metrics: []*scaling.Metric{{Value: 2000.0, TargetValue: floatPtr(1000.0)}},
 		}
 		status, err := s.Scale(ctx, som)
-		if err != nil || status != pb.ScalingStatus_SUCCEEDED {
+		if err != nil || status != scaling.ScalingStatusSucceeded {
 			t.Fatalf("unexpected status=%v, err=%v", status, err)
 		}
 		if len(crClient.updateServiceMinInstancesCalls) != 1 || crClient.updateServiceMinInstancesCalls[0].instances != 10 {
@@ -213,12 +215,12 @@ func TestScaler(t *testing.T) {
 		}
 		mw := &mockMetricWriter{}
 		s := NewScaler(crClient, mw, StaticConfig{UseMinInstances: false, OutputScalerMetrics: true}, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
 				Advanced:       defaultAdvanced(),
 			},
-			Metrics: []*pb.Metric{{Value: 2000.0, Target: &pb.Metric_TargetValue{TargetValue: 1000.0}}},
+			Metrics: []*scaling.Metric{{Value: 2000.0, TargetValue: floatPtr(1000.0)}},
 		}
 		_, err := s.Scale(ctx, som)
 		if err != nil {
@@ -236,15 +238,15 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, autoScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
 				Advanced:       defaultAdvanced(),
 			},
-			Metrics: []*pb.Metric{{Value: 200.0, Target: &pb.Metric_TargetAverageValue{TargetAverageValue: 100.0}}},
+			Metrics: []*scaling.Metric{{Value: 200.0, TargetValue: floatPtr(0), TargetAverageValue: floatPtr(100.0)}},
 		}
 		status, err := s.Scale(ctx, som)
-		if err != nil || status != pb.ScalingStatus_SUCCEEDED {
+		if err != nil || status != scaling.ScalingStatusSucceeded {
 			t.Fatalf("unexpected status=%v, err=%v", status, err)
 		}
 		if len(crClient.updateServiceMinInstancesCalls) != 1 || crClient.updateServiceMinInstancesCalls[0].instances != 2 {
@@ -259,15 +261,15 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, autoScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
 				Advanced:       defaultAdvanced(),
 			},
-			Metrics: []*pb.Metric{{Value: 200.0, Target: &pb.Metric_TargetAverageValue{TargetAverageValue: 100.0}}},
+			Metrics: []*scaling.Metric{{Value: 200.0, TargetValue: floatPtr(50.0), TargetAverageValue: floatPtr(100.0)}},
 		}
 		status, err := s.Scale(ctx, som)
-		if err != nil || status != pb.ScalingStatus_SUCCEEDED {
+		if err != nil || status != scaling.ScalingStatusSucceeded {
 			t.Fatalf("unexpected status=%v, err=%v", status, err)
 		}
 		if len(crClient.updateServiceMinInstancesCalls) != 1 || crClient.updateServiceMinInstancesCalls[0].instances != 2 {
@@ -282,18 +284,18 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, autoScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
 			},
-			Metrics: []*pb.Metric{{Value: 200.0, Target: &pb.Metric_TargetAverageValue{TargetAverageValue: 0}}},
+			Metrics: []*scaling.Metric{{Value: 200.0, TargetValue: floatPtr(0), TargetAverageValue: floatPtr(0)}},
 		}
 		status, err := s.Scale(ctx, som)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if status != pb.ScalingStatus_FAILED {
-			t.Errorf("got status %v, want %v", status, pb.ScalingStatus_FAILED)
+		if status != scaling.ScalingStatusFailed {
+			t.Errorf("got status %v, want %v", status, scaling.ScalingStatusFailed)
 		}
 		if len(crClient.updateServiceMinInstancesCalls) != 0 {
 			t.Errorf("expected no update calls")
@@ -307,15 +309,15 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, manualScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
 				Advanced:       defaultAdvanced(),
 			},
-			Metrics: []*pb.Metric{{Value: 1000.0, Target: &pb.Metric_TargetValue{TargetValue: 1000.0}}},
+			Metrics: []*scaling.Metric{{Value: 1000.0, TargetValue: floatPtr(1000.0)}},
 		}
 		status, err := s.Scale(ctx, som)
-		if err != nil || status != pb.ScalingStatus_SUCCEEDED {
+		if err != nil || status != scaling.ScalingStatusSucceeded {
 			t.Fatalf("unexpected status=%v, err=%v", status, err)
 		}
 		if len(crClient.updateServiceManualInstancesCalls) != 0 || len(crClient.updateServiceMinInstancesCalls) != 0 || len(crClient.updateWorkerPoolManualInstancesCalls) != 0 {
@@ -330,24 +332,24 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, autoScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
-				Advanced: &pb.Advanced{
-					ScalerConfig: &pb.Advanced_ScalerConfig{
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
+				Advanced: &scaling.Advanced{
+					ScalerConfig: &scaling.ScalerConfig{
 						MinInstances: 5,
 						MaxInstances: 10,
-						Behavior: &pb.Advanced_ScalerConfig_Behavior{
-							ScaleUp:   &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 0},
-							ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 0},
+						Behavior: &scaling.Behavior{
+							ScaleUp:   &scaling.ScalingRules{StabilizationWindowSeconds: 0},
+							ScaleDown: &scaling.ScalingRules{StabilizationWindowSeconds: 0},
 						},
 					},
 				},
 			},
-			Metrics: []*pb.Metric{{Value: 3000.0, Target: &pb.Metric_TargetValue{TargetValue: 200.0}}},
+			Metrics: []*scaling.Metric{{Value: 3000.0, TargetValue: floatPtr(200.0)}},
 		}
 		status, err := s.Scale(ctx, som)
-		if err != nil || status != pb.ScalingStatus_SUCCEEDED {
+		if err != nil || status != scaling.ScalingStatusSucceeded {
 			t.Fatalf("unexpected status=%v, err=%v", status, err)
 		}
 		if len(crClient.updateServiceMinInstancesCalls) != 1 || crClient.updateServiceMinInstancesCalls[0].instances != 10 {
@@ -365,12 +367,12 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, manualScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
 				Advanced:       defaultAdvanced(),
 			},
-			Metrics: []*pb.Metric{{Value: 2000.0, Target: &pb.Metric_TargetValue{TargetValue: 1000.0}}},
+			Metrics: []*scaling.Metric{{Value: 2000.0, TargetValue: floatPtr(1000.0)}},
 		}
 		if _, err := s.Scale(ctx, som); err == nil {
 			t.Errorf("expected error when UpdateServiceManualInstances fails")
@@ -384,20 +386,20 @@ func TestScaler(t *testing.T) {
 			},
 		}
 		s := NewScaler(crClient, &mockMetricWriter{}, manualScalingConfig, projectID, logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: serviceWorkloadName},
-				Advanced: &pb.Advanced{
-					ScalerConfig: &pb.Advanced_ScalerConfig{
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: serviceWorkloadName},
+				Advanced: &scaling.Advanced{
+					ScalerConfig: &scaling.ScalerConfig{
 						MinInstances: 20,
 						MaxInstances: 10,
 					},
 				},
 			},
-			Metrics: []*pb.Metric{{Value: 2000.0, Target: &pb.Metric_TargetValue{TargetValue: 1000.0}}},
+			Metrics: []*scaling.Metric{{Value: 2000.0, TargetValue: floatPtr(1000.0)}},
 		}
 		status, err := s.Scale(ctx, som)
-		if err == nil || status != pb.ScalingStatus_FAILED {
+		if err == nil || status != scaling.ScalingStatusFailed {
 			t.Errorf("expected error and ScalingStatusFailed when minInstances > maxInstances, got status=%v, err=%v", status, err)
 		}
 	})

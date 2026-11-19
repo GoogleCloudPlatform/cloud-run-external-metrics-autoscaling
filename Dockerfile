@@ -23,11 +23,10 @@ ARG SRC_DIR
 
 WORKDIR /app
 
-# Install dependencies for Go installation and proto generation
+# Install dependencies for Go installation
 RUN apt-get update && apt-get install -y \
     wget \
     git \
-    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Go
@@ -38,20 +37,8 @@ RUN wget https://go.dev/dl/go1.26.9.linux-amd64.tar.gz && \
 # Set Go paths
 ENV PATH="/usr/local/go/bin:/root/go/bin:${PATH}"
 
-# Install proto plugins
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
-
 # Copy all source files needed for the Go build
-COPY ${SRC_DIR}/proto ./proto
 COPY ${SRC_DIR}/metric-provider ./metric-provider
-
-# Generate Go code from proto files
-# The output will be in metric-provider/proto based on the go_package option in the .proto files.
-RUN protoc --proto_path=. \
-    --go_out=. \
-    --go-grpc_out=. \
-    proto/*.proto
 
 # Build the Go app from the metric-provider directory
 WORKDIR /app/metric-provider

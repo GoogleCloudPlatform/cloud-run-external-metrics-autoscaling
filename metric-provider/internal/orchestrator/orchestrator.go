@@ -19,14 +19,13 @@ import (
 
 	"crema/metric-provider/api"
 	"crema/metric-provider/internal/scaling"
-	pb "crema/metric-provider/proto"
 
 	"github.com/go-logr/logr"
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 )
 
 type ScalerClient interface {
-	Scale(ctx context.Context, req *pb.ScaleRequest) (*pb.ScaleResponse, error)
+	Scale(ctx context.Context, req *scaling.ScaleRequest) (*scaling.ScaleResponse, error)
 	Close() error
 }
 
@@ -71,7 +70,7 @@ func (o *Orchestrator) RefreshMetrics(ctx context.Context) error {
 	kedaScaledObjects := scaling.ToKedaScaledObjects(o.cremaConfig)
 	triggerAuthentications := o.cremaConfig.Spec.TriggerAuthentications
 
-	var scaledObjectMetrics []*pb.ScaledObjectMetrics
+	var scaledObjectMetrics []*scaling.ScaledObjectMetrics
 
 	for _, kedaScaledObject := range kedaScaledObjects {
 		metrics, err := o.refreshMetricsForScaledObject(ctx, &kedaScaledObject, triggerAuthentications)
@@ -82,7 +81,7 @@ func (o *Orchestrator) RefreshMetrics(ctx context.Context) error {
 	}
 
 	if len(scaledObjectMetrics) > 0 {
-		scaleRequest := &pb.ScaleRequest{
+		scaleRequest := &scaling.ScaleRequest{
 			ScaledObjectMetrics: scaledObjectMetrics,
 		}
 		o.logger.Info("Sending scale request", "scaleRequest", scaleRequest)
@@ -102,7 +101,7 @@ func (o *Orchestrator) refreshMetricsForScaledObject(
 	ctx context.Context,
 	kedaScaledObject *kedav1alpha1.ScaledObject,
 	triggerAuthentications []api.TriggerAuthentication,
-) (*pb.ScaledObjectMetrics, error) {
+) (*scaling.ScaledObjectMetrics, error) {
 	logger := o.logger.WithValues("scaleTargetName", kedaScaledObject.Spec.ScaleTargetRef.Name)
 	builders, err := o.builderFactory.MakeBuilders(ctx, kedaScaledObject, triggerAuthentications /*asMetricSource=*/, true)
 
@@ -118,25 +117,25 @@ func (o *Orchestrator) refreshMetricsForScaledObject(
 		return nil, err
 	}
 
-	return &pb.ScaledObjectMetrics{
-		ScaledObject: scaling.ToPbScaledObject(kedaScaledObject.Spec),
+	return &scaling.ScaledObjectMetrics{
+		ScaledObject: scaling.ToScaledObject(kedaScaledObject.Spec),
 		Metrics:      toMetrics(scaledObjectState),
 	}, nil
 }
 
-func toMetrics(scaledObjectState scaling.ScaledObjectState) []*pb.Metric {
-	var pbMetrics []*pb.Metric
+func toMetrics(scaledObjectState scaling.ScaledObjectState) []*scaling.Metric {
+	var metrics []*scaling.Metric
 	for _, metricAndTargetValue := range scaledObjectState.MetricAndTargetValues {
 		metricValue := metricAndTargetValue.MetricValue
-		pbMetric := &pb.Metric{
+		m := &scaling.Metric{
 			Value:       metricValue,
-			TriggerId:   metricAndTargetValue.TriggerName,
+			TriggerID:   metricAndTargetValue.TriggerName,
 			TriggerType: metricAndTargetValue.TriggerType,
 		}
-		scaling.PopulateTargetValue(metricAndTargetValue.TargetValue, pbMetric)
-		pbMetrics = append(pbMetrics, pbMetric)
+		scaling.PopulateTargetValue(metricAndTargetValue.TargetValue, m)
+		metrics = append(metrics, m)
 	}
-	return pbMetrics
+	return metrics
 }
 
 func closeScalers(ctx context.Context, logger logr.Logger, builders []scaling.ScalerBuilder) {

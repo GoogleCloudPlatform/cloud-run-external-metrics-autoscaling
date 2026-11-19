@@ -19,7 +19,7 @@ import (
 	"sync"
 	"testing"
 
-	pb "crema/metric-provider/proto"
+	"crema/metric-provider/internal/scaling"
 
 	"github.com/go-logr/logr"
 )
@@ -36,20 +36,20 @@ func TestScalersManager(t *testing.T) {
 			},
 		}
 		sm := NewScalersManager(crClient, &mockCloudMonitoringClient{}, &logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: targetName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: targetName},
 			},
 		}
 
-		resp, err := sm.Scale(ctx, &pb.ScaleRequest{ScaledObjectMetrics: []*pb.ScaledObjectMetrics{som}})
+		resp, err := sm.Scale(ctx, &scaling.ScaleRequest{ScaledObjectMetrics: []*scaling.ScaledObjectMetrics{som}})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(resp.Results) != 1 {
 			t.Fatalf("expected 1 result, got %d", len(resp.Results))
 		}
-		if resp.Results[0].Status != pb.ScalingStatus_SUCCEEDED || resp.Results[0].ScaleTargetName != targetName {
+		if resp.Results[0].Status != scaling.ScalingStatusSucceeded || resp.Results[0].ScaleTargetName != targetName {
 			t.Errorf("unexpected result: %+v", resp.Results[0])
 		}
 		if len(sm.scalers) != 1 {
@@ -67,19 +67,19 @@ func TestScalersManager(t *testing.T) {
 			},
 		}
 		sm := NewScalersManager(crClient, &mockCloudMonitoringClient{}, &logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: targetName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: targetName},
 			},
 		}
 
 		const concurrentTasks = 20
-		metricsList := make([]*pb.ScaledObjectMetrics, concurrentTasks)
+		metricsList := make([]*scaling.ScaledObjectMetrics, concurrentTasks)
 		for i := 0; i < concurrentTasks; i++ {
 			metricsList[i] = som
 		}
 
-		resp, err := sm.Scale(ctx, &pb.ScaleRequest{ScaledObjectMetrics: metricsList})
+		resp, err := sm.Scale(ctx, &scaling.ScaleRequest{ScaledObjectMetrics: metricsList})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -87,7 +87,7 @@ func TestScalersManager(t *testing.T) {
 			t.Fatalf("expected %d results, got %d", concurrentTasks, len(resp.Results))
 		}
 		for _, res := range resp.Results {
-			if res.Status != pb.ScalingStatus_SUCCEEDED || res.ScaleTargetName != targetName {
+			if res.Status != scaling.ScalingStatusSucceeded || res.ScaleTargetName != targetName {
 				t.Errorf("unexpected result: %+v", res)
 			}
 		}
@@ -106,9 +106,9 @@ func TestScalersManager(t *testing.T) {
 			},
 		}
 		sm := NewScalersManager(crClient, &mockCloudMonitoringClient{}, &logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: targetName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: targetName},
 			},
 		}
 
@@ -118,14 +118,14 @@ func TestScalersManager(t *testing.T) {
 		readyWg.Add(threadCount)
 		doneWg.Add(threadCount)
 		startCh := make(chan struct{})
-		responses := make([]*pb.ScaleResponse, threadCount)
+		responses := make([]*scaling.ScaleResponse, threadCount)
 
 		for i := 0; i < threadCount; i++ {
 			go func(idx int) {
 				defer doneWg.Done()
 				readyWg.Done()
 				<-startCh
-				resp, err := sm.Scale(ctx, &pb.ScaleRequest{ScaledObjectMetrics: []*pb.ScaledObjectMetrics{som}})
+				resp, err := sm.Scale(ctx, &scaling.ScaleRequest{ScaledObjectMetrics: []*scaling.ScaledObjectMetrics{som}})
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -138,7 +138,7 @@ func TestScalersManager(t *testing.T) {
 		doneWg.Wait()
 
 		for _, resp := range responses {
-			if len(resp.Results) != 1 || resp.Results[0].Status != pb.ScalingStatus_SUCCEEDED || resp.Results[0].ScaleTargetName != targetName {
+			if len(resp.Results) != 1 || resp.Results[0].Status != scaling.ScalingStatusSucceeded || resp.Results[0].ScaleTargetName != targetName {
 				t.Errorf("unexpected response: %+v", resp)
 			}
 		}
@@ -157,43 +157,43 @@ func TestScalersManager(t *testing.T) {
 			},
 		}
 		sm := NewScalersManager(crClient, &mockCloudMonitoringClient{}, &logger)
-		badSom := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: targetName},
-				Advanced: &pb.Advanced{
-					ScalerConfig: &pb.Advanced_ScalerConfig{
+		badSom := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: targetName},
+				Advanced: &scaling.Advanced{
+					ScalerConfig: &scaling.ScalerConfig{
 						MinInstances: 0,
 						MaxInstances: 10,
-						Behavior: &pb.Advanced_ScalerConfig_Behavior{
-							ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-								Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{
-									{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_TYPE_UNSPECIFIED, Value: 10, PeriodSeconds: 60},
+						Behavior: &scaling.Behavior{
+							ScaleUp: &scaling.ScalingRules{
+								Policies: []*scaling.Policy{
+									{Type: scaling.PolicyTypeUnspecified, Value: 10, PeriodSeconds: 60},
 								},
 							},
 						},
 					},
 				},
 			},
-			Metrics: []*pb.Metric{{Value: 500.0, Target: &pb.Metric_TargetValue{TargetValue: 100.0}}},
+			Metrics: []*scaling.Metric{{Value: 500.0, TargetValue: floatPtr(100.0)}},
 		}
 		goodTarget := "projects/test-project/locations/test-location/services/good-service"
-		goodSom := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: goodTarget},
+		goodSom := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: goodTarget},
 			},
 		}
 
-		resp, err := sm.Scale(ctx, &pb.ScaleRequest{ScaledObjectMetrics: []*pb.ScaledObjectMetrics{badSom, goodSom}})
+		resp, err := sm.Scale(ctx, &scaling.ScaleRequest{ScaledObjectMetrics: []*scaling.ScaledObjectMetrics{badSom, goodSom}})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(resp.Results) != 2 {
 			t.Fatalf("expected 2 results, got %d", len(resp.Results))
 		}
-		if resp.Results[0].Status != pb.ScalingStatus_FAILED || resp.Results[0].ScaleTargetName != targetName {
+		if resp.Results[0].Status != scaling.ScalingStatusFailed || resp.Results[0].ScaleTargetName != targetName {
 			t.Errorf("expected first workload to fail gracefully, got %+v", resp.Results[0])
 		}
-		if resp.Results[1].Status != pb.ScalingStatus_SUCCEEDED || resp.Results[1].ScaleTargetName != goodTarget {
+		if resp.Results[1].Status != scaling.ScalingStatusSucceeded || resp.Results[1].ScaleTargetName != goodTarget {
 			t.Errorf("expected second workload to succeed, got %+v", resp.Results[1])
 		}
 	})
@@ -209,20 +209,20 @@ func TestScalersManager(t *testing.T) {
 			},
 		}
 		sm := NewScalersManager(crClient, &mockCloudMonitoringClient{}, &logger)
-		som := &pb.ScaledObjectMetrics{
-			ScaledObject: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{Name: targetName},
+		som := &scaling.ScaledObjectMetrics{
+			ScaledObject: &scaling.ScaledObject{
+				ScaleTargetRef: &scaling.ScaleTargetRef{Name: targetName},
 			},
 		}
 
 		cancelledCtx, cancel := context.WithCancel(ctx)
 		cancel()
 
-		resp, err := sm.Scale(cancelledCtx, &pb.ScaleRequest{ScaledObjectMetrics: []*pb.ScaledObjectMetrics{som}})
+		resp, err := sm.Scale(cancelledCtx, &scaling.ScaleRequest{ScaledObjectMetrics: []*scaling.ScaledObjectMetrics{som}})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(resp.Results) != 1 || resp.Results[0].Status != pb.ScalingStatus_SUCCEEDED {
+		if len(resp.Results) != 1 || resp.Results[0].Status != scaling.ScalingStatusSucceeded {
 			t.Errorf("expected scaling to succeed with detached context, got %+v", resp.Results)
 		}
 		if !observedHasDeadline {

@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	pb "crema/metric-provider/proto"
+	"crema/metric-provider/internal/scaling"
 
 	"github.com/go-logr/logr"
 )
@@ -36,7 +36,7 @@ type boundsDebugInfo struct {
 	selectorDebugString string
 }
 
-func (b *boundsDebugInfo) setSelectorDebugString(selector pb.Advanced_ScalerConfig_Behavior_Scaling_SelectPolicy) {
+func (b *boundsDebugInfo) setSelectorDebugString(selector scaling.SelectPolicy) {
 	b.selectorDebugString = fmt.Sprintf("{Select: %s}", selector.String())
 }
 
@@ -92,7 +92,7 @@ func (s *ScalingStabilizer) recordInitialRecommendation(t time.Time, recommended
 	s.recommendations = append(s.recommendations, dataPoint{timestamp: t, value: recommendedInstances})
 }
 
-func getLongestPolicyPeriod(rules *pb.Advanced_ScalerConfig_Behavior_Scaling) time.Duration {
+func getLongestPolicyPeriod(rules *scaling.ScalingRules) time.Duration {
 	if rules == nil {
 		return 0
 	}
@@ -110,7 +110,7 @@ func getLongestPolicyPeriod(rules *pb.Advanced_ScalerConfig_Behavior_Scaling) ti
 }
 
 // MarkScaleEvent records a scaling event when the desired instance count differs from the current instance count.
-func (s *ScalingStabilizer) MarkScaleEvent(behavior *pb.Advanced_ScalerConfig_Behavior, t time.Time, currentInstanceCount, desiredInstanceCount int) {
+func (s *ScalingStabilizer) MarkScaleEvent(behavior *scaling.Behavior, t time.Time, currentInstanceCount, desiredInstanceCount int) {
 	if desiredInstanceCount == currentInstanceCount {
 		return
 	}
@@ -125,7 +125,7 @@ func (s *ScalingStabilizer) MarkScaleEvent(behavior *pb.Advanced_ScalerConfig_Be
 	}
 }
 
-func processScaleEvent(scaleEvents []dataPoint, rules *pb.Advanced_ScalerConfig_Behavior_Scaling, instanceCountChange int, t time.Time) []dataPoint {
+func processScaleEvent(scaleEvents []dataPoint, rules *scaling.ScalingRules, instanceCountChange int, t time.Time) []dataPoint {
 	longestPolicyPeriod := getLongestPolicyPeriod(rules)
 	cutoff := time.Now().Add(-longestPolicyPeriod)
 
@@ -152,7 +152,7 @@ func getInstanceCountChangeForPeriod(t time.Time, lookbackPeriod time.Duration, 
 // GetStabilizedRecommendation returns a recommendation for scaling bounded by the stabilization window and rate policies.
 // Lookback cutoffs are determined using the specified time and are exclusive.
 func (s *ScalingStabilizer) GetStabilizedRecommendation(
-	behavior *pb.Advanced_ScalerConfig_Behavior,
+	behavior *scaling.Behavior,
 	t time.Time,
 	currentInstanceCount int,
 	recommendedInstances int,
@@ -191,7 +191,7 @@ func (s *ScalingStabilizer) GetStabilizedRecommendation(
 }
 
 func (s *ScalingStabilizer) getBoundedRecommendationForScaleUp(
-	behavior *pb.Advanced_ScalerConfig_Behavior,
+	behavior *scaling.Behavior,
 	t time.Time,
 	currentInstanceCount int,
 	recommendedInstances int,
@@ -215,23 +215,23 @@ func (s *ScalingStabilizer) getBoundedRecommendationForScaleUp(
 func (s *ScalingStabilizer) rateLimitScaleUpRecommendation(
 	t time.Time,
 	currentInstanceCount int,
-	scaleUp *pb.Advanced_ScalerConfig_Behavior_Scaling,
+	scaleUp *scaling.ScalingRules,
 	debug *boundsDebugInfo,
 ) (int, bool) {
 	comparator := func(a, b int) int { return max(a, b) }
 	scaleUpBound := 0
 
-	if scaleUp.SelectPolicy == pb.Advanced_ScalerConfig_Behavior_Scaling_DISABLED {
-		debug.setSelectorDebugString(pb.Advanced_ScalerConfig_Behavior_Scaling_DISABLED)
+	if scaleUp.SelectPolicy == scaling.SelectPolicyDisabled {
+		debug.setSelectorDebugString(scaling.SelectPolicyDisabled)
 		return currentInstanceCount, true
 	} else if len(scaleUp.Policies) == 0 {
 		return 0, false
-	} else if scaleUp.SelectPolicy == pb.Advanced_ScalerConfig_Behavior_Scaling_MIN {
-		debug.setSelectorDebugString(pb.Advanced_ScalerConfig_Behavior_Scaling_MIN)
+	} else if scaleUp.SelectPolicy == scaling.SelectPolicyMin {
+		debug.setSelectorDebugString(scaling.SelectPolicyMin)
 		comparator = func(a, b int) int { return min(a, b) }
 		scaleUpBound = maxInstances
-	} else if scaleUp.SelectPolicy == pb.Advanced_ScalerConfig_Behavior_Scaling_MAX {
-		debug.setSelectorDebugString(pb.Advanced_ScalerConfig_Behavior_Scaling_MAX)
+	} else if scaleUp.SelectPolicy == scaling.SelectPolicyMax {
+		debug.setSelectorDebugString(scaling.SelectPolicyMax)
 		comparator = func(a, b int) int { return max(a, b) }
 		scaleUpBound = 0
 	}
@@ -244,10 +244,10 @@ func (s *ScalingStabilizer) rateLimitScaleUpRecommendation(
 
 		var bound int
 		switch policy.Type {
-		case pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT:
+		case scaling.PolicyTypePercent:
 			// Round up away from zero to match Java BigDecimal.setScale(0, RoundingMode.UP)
 			bound = roundUpAwayFromZeroToSaturatedInt(float64(periodStartInstances) * (100.0 + float64(policy.Value)) / 100.0)
-		case pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES:
+		case scaling.PolicyTypeInstances:
 			bound = clampToInt32(int64(periodStartInstances) + int64(policy.Value))
 		default:
 			panic(fmt.Sprintf("unsupported policy type: %v", policy.Type))
@@ -261,7 +261,7 @@ func (s *ScalingStabilizer) rateLimitScaleUpRecommendation(
 }
 
 func (s *ScalingStabilizer) getBoundedRecommendationForScaleDown(
-	behavior *pb.Advanced_ScalerConfig_Behavior,
+	behavior *scaling.Behavior,
 	t time.Time,
 	currentInstanceCount int,
 	recommendedInstances int,
@@ -285,23 +285,23 @@ func (s *ScalingStabilizer) getBoundedRecommendationForScaleDown(
 func (s *ScalingStabilizer) rateLimitScaleDownRecommendation(
 	t time.Time,
 	currentInstanceCount int,
-	scaleDown *pb.Advanced_ScalerConfig_Behavior_Scaling,
+	scaleDown *scaling.ScalingRules,
 	debug *boundsDebugInfo,
 ) (int, bool) {
 	comparator := func(a, b int) int { return min(a, b) }
 	scaleDownBound := maxInstances
 
-	if scaleDown.SelectPolicy == pb.Advanced_ScalerConfig_Behavior_Scaling_DISABLED {
-		debug.setSelectorDebugString(pb.Advanced_ScalerConfig_Behavior_Scaling_DISABLED)
+	if scaleDown.SelectPolicy == scaling.SelectPolicyDisabled {
+		debug.setSelectorDebugString(scaling.SelectPolicyDisabled)
 		return currentInstanceCount, true
 	} else if len(scaleDown.Policies) == 0 {
 		return 0, false
-	} else if scaleDown.SelectPolicy == pb.Advanced_ScalerConfig_Behavior_Scaling_MIN {
-		debug.setSelectorDebugString(pb.Advanced_ScalerConfig_Behavior_Scaling_MIN)
+	} else if scaleDown.SelectPolicy == scaling.SelectPolicyMin {
+		debug.setSelectorDebugString(scaling.SelectPolicyMin)
 		comparator = func(a, b int) int { return max(a, b) }
 		scaleDownBound = minInstances
-	} else if scaleDown.SelectPolicy == pb.Advanced_ScalerConfig_Behavior_Scaling_MAX {
-		debug.setSelectorDebugString(pb.Advanced_ScalerConfig_Behavior_Scaling_MAX)
+	} else if scaleDown.SelectPolicy == scaling.SelectPolicyMax {
+		debug.setSelectorDebugString(scaling.SelectPolicyMax)
 		comparator = func(a, b int) int { return min(a, b) }
 		scaleDownBound = maxInstances
 	}
@@ -314,10 +314,10 @@ func (s *ScalingStabilizer) rateLimitScaleDownRecommendation(
 
 		var bound int
 		switch policy.Type {
-		case pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT:
+		case scaling.PolicyTypePercent:
 			// Round down to ensure we're able to scale down: trunc(periodStartInstances * (100 - value) / 100)
 			bound = truncToSaturatedInt(float64(periodStartInstances) * (100.0 - float64(policy.Value)) / 100.0)
-		case pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES:
+		case scaling.PolicyTypeInstances:
 			bound = clampToInt32(int64(periodStartInstances) - int64(policy.Value))
 		default:
 			panic(fmt.Sprintf("unsupported policy type: %v", policy.Type))
@@ -331,7 +331,7 @@ func (s *ScalingStabilizer) rateLimitScaleDownRecommendation(
 }
 
 func (s *ScalingStabilizer) stabilizeRecommendation(
-	behavior *pb.Advanced_ScalerConfig_Behavior,
+	behavior *scaling.Behavior,
 	t time.Time,
 	currentInstanceCount int,
 	recommendedInstances int,
@@ -378,7 +378,7 @@ func (s *ScalingStabilizer) stabilizeRecommendation(
 	return stabilizedRecommendation
 }
 
-func getStabilizationCutoff(t time.Time, rules *pb.Advanced_ScalerConfig_Behavior_Scaling) time.Time {
+func getStabilizationCutoff(t time.Time, rules *scaling.ScalingRules) time.Time {
 	if rules == nil || rules.StabilizationWindowSeconds == 0 {
 		return t
 	}

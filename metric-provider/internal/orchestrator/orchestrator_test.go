@@ -22,7 +22,6 @@ import (
 	"crema/metric-provider/api"
 	"crema/metric-provider/internal/logging"
 	"crema/metric-provider/internal/scaling"
-	pb "crema/metric-provider/proto"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	"github.com/stretchr/testify/mock"
@@ -35,12 +34,12 @@ type MockScalerServerClient struct {
 	mock.Mock
 }
 
-func (m *MockScalerServerClient) Scale(ctx context.Context, req *pb.ScaleRequest) (*pb.ScaleResponse, error) {
+func (m *MockScalerServerClient) Scale(ctx context.Context, req *scaling.ScaleRequest) (*scaling.ScaleResponse, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*pb.ScaleResponse), args.Error(1)
+	return args.Get(0).(*scaling.ScaleResponse), args.Error(1)
 }
 
 func (m *MockScalerServerClient) Close() error {
@@ -127,28 +126,27 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 		}
 		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.Anything, mock.Anything).Return(*scaledObjectState, nil)
 
-		expectedScaleRequest := &pb.ScaleRequest{
-			ScaledObjectMetrics: []*pb.ScaledObjectMetrics{
+		targetAvg := 15.0
+		expectedScaleRequest := &scaling.ScaleRequest{
+			ScaledObjectMetrics: []*scaling.ScaledObjectMetrics{
 				{
-					ScaledObject: &pb.ScaledObject{
-						ScaleTargetRef: &pb.ScaleTargetRef{
+					ScaledObject: &scaling.ScaledObject{
+						ScaleTargetRef: &scaling.ScaleTargetRef{
 							Name: scaleTargetRefName,
 						},
 					},
-					Metrics: []*pb.Metric{
+					Metrics: []*scaling.Metric{
 						{
-							Value: metricValue,
-							Target: &pb.Metric_TargetAverageValue{
-								TargetAverageValue: 15.0,
-							},
-							TriggerId:   triggerName,
-							TriggerType: internalTriggerType,
+							Value:              metricValue,
+							TargetAverageValue: &targetAvg,
+							TriggerID:          triggerName,
+							TriggerType:        internalTriggerType,
 						},
 					},
 				},
 			},
 		}
-		mockScalerClient.On("Scale", mock.Anything, expectedScaleRequest).Return(&pb.ScaleResponse{}, nil)
+		mockScalerClient.On("Scale", mock.Anything, expectedScaleRequest).Return(&scaling.ScaleResponse{}, nil)
 
 		orchestrator.RefreshMetrics(context.Background())
 
@@ -229,28 +227,27 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 			},
 		}
 		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.Anything, mock.Anything).Return(*scaledObjectState, nil)
-		expectedScaleRequest := &pb.ScaleRequest{
-			ScaledObjectMetrics: []*pb.ScaledObjectMetrics{
+		targetAvg := 15.0
+		expectedScaleRequest := &scaling.ScaleRequest{
+			ScaledObjectMetrics: []*scaling.ScaledObjectMetrics{
 				{
-					ScaledObject: &pb.ScaledObject{
-						ScaleTargetRef: &pb.ScaleTargetRef{
+					ScaledObject: &scaling.ScaledObject{
+						ScaleTargetRef: &scaling.ScaleTargetRef{
 							Name: successfulScaleTargetRefName,
 						},
 					},
-					Metrics: []*pb.Metric{
+					Metrics: []*scaling.Metric{
 						{
-							Value: metricValue,
-							Target: &pb.Metric_TargetAverageValue{
-								TargetAverageValue: 15.0,
-							},
-							TriggerId:   triggerName,
-							TriggerType: triggerType,
+							Value:              metricValue,
+							TargetAverageValue: &targetAvg,
+							TriggerID:          triggerName,
+							TriggerType:        triggerType,
 						},
 					},
 				},
 			},
 		}
-		mockScalerClient.On("Scale", mock.Anything, expectedScaleRequest).Return(&pb.ScaleResponse{}, nil)
+		mockScalerClient.On("Scale", mock.Anything, expectedScaleRequest).Return(&scaling.ScaleResponse{}, nil)
 
 		orchestrator.RefreshMetrics(context.Background())
 
@@ -320,28 +317,27 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 			return so.Name == successfulScaleTargetRefName
 		}), mock.Anything).Return(*scaledObjectState, nil)
 
-		expectedScaleRequest := &pb.ScaleRequest{
-			ScaledObjectMetrics: []*pb.ScaledObjectMetrics{
+		targetAvg := 15.0
+		expectedScaleRequest := &scaling.ScaleRequest{
+			ScaledObjectMetrics: []*scaling.ScaledObjectMetrics{
 				{
-					ScaledObject: &pb.ScaledObject{
-						ScaleTargetRef: &pb.ScaleTargetRef{
+					ScaledObject: &scaling.ScaledObject{
+						ScaleTargetRef: &scaling.ScaleTargetRef{
 							Name: successfulScaleTargetRefName,
 						},
 					},
-					Metrics: []*pb.Metric{
+					Metrics: []*scaling.Metric{
 						{
-							Value: metricValue,
-							Target: &pb.Metric_TargetAverageValue{
-								TargetAverageValue: 15.0,
-							},
-							TriggerId:   triggerName,
-							TriggerType: triggerType,
+							Value:              metricValue,
+							TargetAverageValue: &targetAvg,
+							TriggerID:          triggerName,
+							TriggerType:        triggerType,
 						},
 					},
 				},
 			},
 		}
-		mockScalerClient.On("Scale", mock.Anything, expectedScaleRequest).Return(&pb.ScaleResponse{}, nil)
+		mockScalerClient.On("Scale", mock.Anything, expectedScaleRequest).Return(&scaling.ScaleResponse{}, nil)
 
 		orchestrator.RefreshMetrics(context.Background())
 
@@ -454,7 +450,7 @@ func TestOrchestrator_RefreshMetrics(t *testing.T) {
 		}
 		mockStateProvider.On("GetScaledObjectState", mock.Anything, mock.Anything, mock.Anything).Return(*scaledObjectState, nil)
 
-		mockScalerClient.On("Scale", mock.Anything, mock.Anything).Return(&pb.ScaleResponse{}, nil)
+		mockScalerClient.On("Scale", mock.Anything, mock.Anything).Return(&scaling.ScaleResponse{}, nil)
 		mockScaler.On("Close", mock.Anything).Return(nil)
 
 		_ = orchestrator.RefreshMetrics(context.Background())

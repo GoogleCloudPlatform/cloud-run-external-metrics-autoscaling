@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	pb "crema/metric-provider/proto"
+	"crema/metric-provider/internal/scaling"
 
 	"github.com/go-logr/logr"
 )
@@ -34,7 +34,7 @@ func TestScalingStabilizer(t *testing.T) {
 	}
 
 	t.Run("scalingStabilizer_withEmptyConfig", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{}
+		behavior := &scaling.Behavior{}
 		ss := NewScalingStabilizer(100, logger)
 
 		assertRec(t, ss.GetStabilizedRecommendation(behavior, time.Now(), 5, 1000, "test-workload"), 1000)
@@ -42,8 +42,8 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleUpStabilizationOnly_returnsStabilizationWindowBound", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 300},
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{StabilizationWindowSeconds: 300},
 		}
 		now := time.Now()
 		ss := NewScalingStabilizer(100, logger)
@@ -56,8 +56,8 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleDownStabilizationOnly_returnsStabilizationWindowBound", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 300},
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{StabilizationWindowSeconds: 300},
 		}
 		now := time.Now()
 		ss := NewScalingStabilizer(100, logger)
@@ -70,8 +70,8 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_unchangedRecommendation_countsTowardScaleUpStabilization", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 300},
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{StabilizationWindowSeconds: 300},
 		}
 		now := time.Now()
 		ss := NewScalingStabilizer(100, logger)
@@ -81,8 +81,8 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_unchangedRecommendation_countsTowardScaleDownStabilization", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 300},
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{StabilizationWindowSeconds: 300},
 		}
 		now := time.Now()
 		ss := NewScalingStabilizer(100, logger)
@@ -92,9 +92,9 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleDownPercentPolicy_returnsPercentPolicyBound", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{percentPolicy}},
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{Policies: []*scaling.Policy{percentPolicy}},
 		}
 		ss := NewScalingStabilizer(100, logger)
 		now := time.Now()
@@ -110,9 +110,9 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleDownInstancesPolicy_returnsInstancesPolicyBound", func(t *testing.T) {
-		instancesPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES, Value: 1, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{instancesPolicy}},
+		instancesPolicy := &scaling.Policy{Type: scaling.PolicyTypeInstances, Value: 1, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{Policies: []*scaling.Policy{instancesPolicy}},
 		}
 		ss := NewScalingStabilizer(100, logger)
 		now := time.Now()
@@ -128,10 +128,10 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_multipleScaleDownPoliciesUnsetSelectPolicy_returnsMinBound", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		instancesPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES, Value: 1, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{instancesPolicy, percentPolicy}},
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		instancesPolicy := &scaling.Policy{Type: scaling.PolicyTypeInstances, Value: 1, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{Policies: []*scaling.Policy{instancesPolicy, percentPolicy}},
 		}
 		ss := NewScalingStabilizer(100, logger)
 		now := time.Now()
@@ -147,12 +147,12 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_multipleScaleDownPoliciesMaxSelectPolicy_returnsMinBound", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		instancesPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES, Value: 1, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies:     []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{instancesPolicy, percentPolicy},
-				SelectPolicy: pb.Advanced_ScalerConfig_Behavior_Scaling_MAX,
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		instancesPolicy := &scaling.Policy{Type: scaling.PolicyTypeInstances, Value: 1, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{
+				Policies:     []*scaling.Policy{instancesPolicy, percentPolicy},
+				SelectPolicy: scaling.SelectPolicyMax,
 			},
 		}
 		ss := NewScalingStabilizer(100, logger)
@@ -169,12 +169,12 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_multipleScaleDownPoliciesMinSelectPolicy_returnsMaxBound", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		instancesPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES, Value: 1, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies:     []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{instancesPolicy, percentPolicy},
-				SelectPolicy: pb.Advanced_ScalerConfig_Behavior_Scaling_MIN,
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		instancesPolicy := &scaling.Policy{Type: scaling.PolicyTypeInstances, Value: 1, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{
+				Policies:     []*scaling.Policy{instancesPolicy, percentPolicy},
+				SelectPolicy: scaling.SelectPolicyMin,
 			},
 		}
 		ss := NewScalingStabilizer(100, logger)
@@ -191,9 +191,9 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleUpPercentPolicy_returnsPercentPolicyBound", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{percentPolicy}},
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{Policies: []*scaling.Policy{percentPolicy}},
 		}
 		ss := NewScalingStabilizer(100, logger)
 		now := time.Now()
@@ -209,10 +209,10 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleUpFromZero_isAlwaysAllowed", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies:                   []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{percentPolicy},
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{
+				Policies:                   []*scaling.Policy{percentPolicy},
 				StabilizationWindowSeconds: 300,
 			},
 		}
@@ -223,8 +223,8 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleUpFromZero_countsTowardScaleDownStabilization", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 300},
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{StabilizationWindowSeconds: 300},
 		}
 		ss := NewScalingStabilizer(0, logger)
 		now := time.Now()
@@ -236,9 +236,9 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleUpInstancesPolicy_returnsInstancesPolicyBound", func(t *testing.T) {
-		instancesPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES, Value: 5, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{instancesPolicy}},
+		instancesPolicy := &scaling.Policy{Type: scaling.PolicyTypeInstances, Value: 5, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{Policies: []*scaling.Policy{instancesPolicy}},
 		}
 		ss := NewScalingStabilizer(100, logger)
 		now := time.Now()
@@ -254,10 +254,10 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleUpMultiplePoliciesUnsetSelectPolicy_returnsMaxBound", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		instancesPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES, Value: 5, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{instancesPolicy, percentPolicy}},
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		instancesPolicy := &scaling.Policy{Type: scaling.PolicyTypeInstances, Value: 5, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{Policies: []*scaling.Policy{instancesPolicy, percentPolicy}},
 		}
 		ss := NewScalingStabilizer(100, logger)
 		now := time.Now()
@@ -273,12 +273,12 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleUpMultiplePoliciesMaxSelectPolicy_returnsMaxBound", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		instancesPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES, Value: 5, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies:     []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{instancesPolicy, percentPolicy},
-				SelectPolicy: pb.Advanced_ScalerConfig_Behavior_Scaling_MAX,
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		instancesPolicy := &scaling.Policy{Type: scaling.PolicyTypeInstances, Value: 5, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{
+				Policies:     []*scaling.Policy{instancesPolicy, percentPolicy},
+				SelectPolicy: scaling.SelectPolicyMax,
 			},
 		}
 		ss := NewScalingStabilizer(100, logger)
@@ -295,12 +295,12 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleUpMultiplePoliciesWithMinSelectPolicy_returnsMinBound", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 100, PeriodSeconds: 90}
-		instancesPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES, Value: 5, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies:     []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{instancesPolicy, percentPolicy},
-				SelectPolicy: pb.Advanced_ScalerConfig_Behavior_Scaling_MIN,
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 100, PeriodSeconds: 90}
+		instancesPolicy := &scaling.Policy{Type: scaling.PolicyTypeInstances, Value: 5, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{
+				Policies:     []*scaling.Policy{instancesPolicy, percentPolicy},
+				SelectPolicy: scaling.SelectPolicyMin,
 			},
 		}
 		ss := NewScalingStabilizer(100, logger)
@@ -317,8 +317,8 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleUpDisabled_returnsCurrentInstances", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{SelectPolicy: pb.Advanced_ScalerConfig_Behavior_Scaling_DISABLED},
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{SelectPolicy: scaling.SelectPolicyDisabled},
 		}
 		ss := NewScalingStabilizer(100, logger)
 		now := time.Now()
@@ -329,8 +329,8 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleDownDisabled_returnsCurrentInstances", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{SelectPolicy: pb.Advanced_ScalerConfig_Behavior_Scaling_DISABLED},
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{SelectPolicy: scaling.SelectPolicyDisabled},
 		}
 		ss := NewScalingStabilizer(200, logger)
 		now := time.Now()
@@ -341,12 +341,12 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleUpMultiplePoliciesMaxSelectPolicyAndStabilizationWindow_returnsStabilizationBound", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{
 				StabilizationWindowSeconds: 60,
-				Policies:                   []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{percentPolicy},
-				SelectPolicy:               pb.Advanced_ScalerConfig_Behavior_Scaling_MAX,
+				Policies:                   []*scaling.Policy{percentPolicy},
+				SelectPolicy:               scaling.SelectPolicyMax,
 			},
 		}
 		ss := NewScalingStabilizer(100, logger)
@@ -357,12 +357,12 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_scaleDownMultiplePoliciesMaxSelectPolicyAndStabilizationWindow_returnsStabilizationBound", func(t *testing.T) {
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{
 				StabilizationWindowSeconds: 60,
-				Policies:                   []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{percentPolicy},
-				SelectPolicy:               pb.Advanced_ScalerConfig_Behavior_Scaling_MAX,
+				Policies:                   []*scaling.Policy{percentPolicy},
+				SelectPolicy:               scaling.SelectPolicyMax,
 			},
 		}
 		ss := NewScalingStabilizer(100, logger)
@@ -373,39 +373,39 @@ func TestScalingStabilizer(t *testing.T) {
 	})
 
 	t.Run("getStabilizedRecommendation_decreasingWindowSize_returnsCorrectBound", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 300},
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{StabilizationWindowSeconds: 300},
 		}
 		now := time.Now()
 		ss := NewScalingStabilizer(100, logger)
 
 		assertRec(t, ss.GetStabilizedRecommendation(behavior, now.Add(60*time.Second), 100, 90, "test-workload"), 100)
 
-		decreasedStabilizationWindow := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 60},
+		decreasedStabilizationWindow := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{StabilizationWindowSeconds: 60},
 		}
 		assertRec(t, ss.GetStabilizedRecommendation(decreasedStabilizationWindow, now.Add(119*time.Second), 100, 80, "test-workload"), 90)
 	})
 
 	t.Run("getStabilizedRecommendation_increasingWindowSize_returnsCorrectBound", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 300},
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{StabilizationWindowSeconds: 300},
 		}
 		now := time.Now()
 		ss := NewScalingStabilizer(100, logger)
 
 		assertRec(t, ss.GetStabilizedRecommendation(behavior, now.Add(60*time.Second), 100, 90, "test-workload"), 100)
 
-		increasedStabilizationWindow := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{StabilizationWindowSeconds: 360},
+		increasedStabilizationWindow := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{StabilizationWindowSeconds: 360},
 		}
 		assertRec(t, ss.GetStabilizedRecommendation(increasedStabilizationWindow, now.Add(359*time.Second), 100, 80, "test-workload"), 100)
 	})
 
 	t.Run("getStabilizedRecommendation_percentIncreases_returnsCorrectBound", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}},
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{
+				Policies: []*scaling.Policy{{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}},
 			},
 		}
 		ss := NewScalingStabilizer(100, logger)
@@ -416,18 +416,18 @@ func TestScalingStabilizer(t *testing.T) {
 
 		assertRec(t, ss.GetStabilizedRecommendation(behavior, now.Add(59*time.Second), 50, 10, "test-workload"), 50)
 
-		increasedScaledownPercent := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 80, PeriodSeconds: 60}},
+		increasedScaledownPercent := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{
+				Policies: []*scaling.Policy{{Type: scaling.PolicyTypePercent, Value: 80, PeriodSeconds: 60}},
 			},
 		}
 		assertRec(t, ss.GetStabilizedRecommendation(increasedScaledownPercent, now.Add(60*time.Second), 50, 0, "test-workload"), 10)
 	})
 
 	t.Run("getStabilizedRecommendation_percentDecreases_returnsCorrectBound", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}},
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{
+				Policies: []*scaling.Policy{{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}},
 			},
 		}
 		ss := NewScalingStabilizer(100, logger)
@@ -438,18 +438,18 @@ func TestScalingStabilizer(t *testing.T) {
 
 		assertRec(t, ss.GetStabilizedRecommendation(behavior, now.Add(59*time.Second), 50, 10, "test-workload"), 50)
 
-		decreasedScaledownPercent := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 20, PeriodSeconds: 60}},
+		decreasedScaledownPercent := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{
+				Policies: []*scaling.Policy{{Type: scaling.PolicyTypePercent, Value: 20, PeriodSeconds: 60}},
 			},
 		}
 		assertRec(t, ss.GetStabilizedRecommendation(decreasedScaledownPercent, now.Add(60*time.Second), 50, 0, "test-workload"), 40)
 	})
 
 	t.Run("getStabilizedRecommendation_rateWindowIncreases_returnsCorrectBound", func(t *testing.T) {
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}},
+		behavior := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{
+				Policies: []*scaling.Policy{{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}},
 			},
 		}
 		ss := NewScalingStabilizer(100, logger)
@@ -464,9 +464,9 @@ func TestScalingStabilizer(t *testing.T) {
 		assertRec(t, ss.GetStabilizedRecommendation(behavior, now.Add(90*time.Second), 45, 40, "test-workload"), 40)
 		ss.MarkScaleEvent(behavior, now.Add(90*time.Second), 45, 40)
 
-		decreasedScaleDownWindow := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 30}},
+		decreasedScaleDownWindow := &scaling.Behavior{
+			ScaleDown: &scaling.ScalingRules{
+				Policies: []*scaling.Policy{{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 30}},
 			},
 		}
 		assertRec(t, ss.GetStabilizedRecommendation(decreasedScaleDownWindow, now.Add(120*time.Second), 40, 0, "test-workload"), 20)
@@ -475,11 +475,11 @@ func TestScalingStabilizer(t *testing.T) {
 	t.Run("getStabilizedRecommendation_negativePeriodStartInstancesScaleUpPercent_roundsAwayFromZero", func(t *testing.T) {
 		// If periodStartInstances becomes negative (e.g. -5) and scaleUp percent is 50%,
 		// Java BigDecimal.valueOf(-5 * 150.0 / 100.0).setScale(0, RoundingMode.UP) = -8.
-		percentPolicy := &pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{Type: pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT, Value: 50, PeriodSeconds: 60}
-		behavior := &pb.Advanced_ScalerConfig_Behavior{
-			ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-				SelectPolicy: pb.Advanced_ScalerConfig_Behavior_Scaling_MIN,
-				Policies:     []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{percentPolicy},
+		percentPolicy := &scaling.Policy{Type: scaling.PolicyTypePercent, Value: 50, PeriodSeconds: 60}
+		behavior := &scaling.Behavior{
+			ScaleUp: &scaling.ScalingRules{
+				SelectPolicy: scaling.SelectPolicyMin,
+				Policies:     []*scaling.Policy{percentPolicy},
 			},
 		}
 		ss := NewScalingStabilizer(10, logger)

@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	pb "crema/metric-provider/proto"
+	"crema/metric-provider/internal/scaling"
 
 	"github.com/go-logr/logr"
 )
@@ -52,15 +52,15 @@ func NewScalersManager(
 }
 
 // Scale executes a scale operation for each scaled object in the request concurrently.
-func (m *ScalersManager) Scale(ctx context.Context, req *pb.ScaleRequest) (*pb.ScaleResponse, error) {
+func (m *ScalersManager) Scale(ctx context.Context, req *scaling.ScaleRequest) (*scaling.ScaleResponse, error) {
 	m.logger.Info(fmt.Sprintf("Received ScaleRequest: %+v", req))
 
-	var metricsList []*pb.ScaledObjectMetrics
+	var metricsList []*scaling.ScaledObjectMetrics
 	if req != nil {
 		metricsList = req.ScaledObjectMetrics
 	}
 
-	results := make([]*pb.ScalingResult, len(metricsList))
+	results := make([]*scaling.ScalingResult, len(metricsList))
 	var wg sync.WaitGroup
 	wg.Add(len(metricsList))
 
@@ -70,7 +70,7 @@ func (m *ScalersManager) Scale(ctx context.Context, req *pb.ScaleRequest) (*pb.S
 	defer cancel()
 
 	for i, som := range metricsList {
-		go func(idx int, scaledObjectMetrics *pb.ScaledObjectMetrics) {
+		go func(idx int, scaledObjectMetrics *scaling.ScaledObjectMetrics) {
 			defer wg.Done()
 			var scaleTargetName string
 			if scaledObjectMetrics != nil && scaledObjectMetrics.ScaledObject != nil && scaledObjectMetrics.ScaledObject.ScaleTargetRef != nil {
@@ -79,9 +79,9 @@ func (m *ScalersManager) Scale(ctx context.Context, req *pb.ScaleRequest) (*pb.S
 			defer func() {
 				if r := recover(); r != nil {
 					m.logger.Error(fmt.Errorf("panic: %v", r), fmt.Sprintf("Failed to scale %s", scaleTargetName))
-					results[idx] = &pb.ScalingResult{
+					results[idx] = &scaling.ScalingResult{
 						ScaleTargetName: scaleTargetName,
-						Status:          pb.ScalingStatus_FAILED,
+						Status:          scaling.ScalingStatusFailed,
 					}
 				}
 			}()
@@ -89,9 +89,9 @@ func (m *ScalersManager) Scale(ctx context.Context, req *pb.ScaleRequest) (*pb.S
 			scaler, err := m.getOrCreateScaler(scaledObjectMetrics.GetScaledObject())
 			if err != nil {
 				m.logger.Error(err, fmt.Sprintf("Failed to scale %s", scaleTargetName))
-				results[idx] = &pb.ScalingResult{
+				results[idx] = &scaling.ScalingResult{
 					ScaleTargetName: scaleTargetName,
-					Status:          pb.ScalingStatus_FAILED,
+					Status:          scaling.ScalingStatusFailed,
 				}
 				return
 			}
@@ -99,14 +99,14 @@ func (m *ScalersManager) Scale(ctx context.Context, req *pb.ScaleRequest) (*pb.S
 			status, err := scaler.Scale(scaleCtx, scaledObjectMetrics)
 			if err != nil {
 				m.logger.Error(err, fmt.Sprintf("Failed to scale %s", scaleTargetName))
-				results[idx] = &pb.ScalingResult{
+				results[idx] = &scaling.ScalingResult{
 					ScaleTargetName: scaleTargetName,
-					Status:          pb.ScalingStatus_FAILED,
+					Status:          scaling.ScalingStatusFailed,
 				}
 				return
 			}
 
-			results[idx] = &pb.ScalingResult{
+			results[idx] = &scaling.ScalingResult{
 				ScaleTargetName: scaleTargetName,
 				Status:          status,
 			}
@@ -114,7 +114,7 @@ func (m *ScalersManager) Scale(ctx context.Context, req *pb.ScaleRequest) (*pb.S
 	}
 
 	wg.Wait()
-	return &pb.ScaleResponse{Results: results}, nil
+	return &scaling.ScaleResponse{Results: results}, nil
 }
 
 // Close closes underlying clients.
@@ -125,7 +125,7 @@ func (m *ScalersManager) Close() error {
 	return nil
 }
 
-func (m *ScalersManager) getOrCreateScaler(scaledObject *pb.ScaledObject) (*Scaler, error) {
+func (m *ScalersManager) getOrCreateScaler(scaledObject *scaling.ScaledObject) (*Scaler, error) {
 	var scaleTargetName string
 	if scaledObject != nil && scaledObject.ScaleTargetRef != nil {
 		scaleTargetName = scaledObject.ScaleTargetRef.Name
@@ -153,7 +153,7 @@ func (m *ScalersManager) getOrCreateScaler(scaledObject *pb.ScaledObject) (*Scal
 	return created, nil
 }
 
-func (m *ScalersManager) buildScaler(scaledObject *pb.ScaledObject) (*Scaler, error) {
+func (m *ScalersManager) buildScaler(scaledObject *scaling.ScaledObject) (*Scaler, error) {
 	var scaleTargetName string
 	if scaledObject != nil && scaledObject.ScaleTargetRef != nil {
 		scaleTargetName = scaledObject.ScaleTargetRef.Name

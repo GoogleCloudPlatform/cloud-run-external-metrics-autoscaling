@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	pb "crema/metric-provider/proto"
+	"crema/metric-provider/internal/scaling"
 
 	"github.com/go-logr/logr"
 )
@@ -68,7 +68,7 @@ func NewScaler(
 }
 
 // Scale scales the target Cloud Run service or worker pool based on the provided metrics.
-func (s *Scaler) Scale(ctx context.Context, scaledObjectMetrics *pb.ScaledObjectMetrics) (pb.ScalingStatus, error) {
+func (s *Scaler) Scale(ctx context.Context, scaledObjectMetrics *scaling.ScaledObjectMetrics) (scaling.ScalingStatus, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -80,16 +80,16 @@ func (s *Scaler) Scale(ctx context.Context, scaledObjectMetrics *pb.ScaledObject
 	}
 	workloadInfo, err := ParseWorkloadInfo(workloadName)
 	if err != nil {
-		return pb.ScalingStatus_FAILED, err
+		return scaling.ScalingStatusFailed, err
 	}
 
 	if workloadInfo.WorkloadType == WorkloadTypeWorkerPool && s.staticConfig.UseMinInstances {
-		return pb.ScalingStatus_FAILED, fmt.Errorf("USE_MIN_INSTANCES is not supported for worker pool workloads")
+		return scaling.ScalingStatusFailed, fmt.Errorf("USE_MIN_INSTANCES is not supported for worker pool workloads")
 	}
 
 	currentInstanceCount, err := GetInstanceCount(ctx, s.cloudRunClient, workloadInfo)
 	if err != nil {
-		return pb.ScalingStatus_FAILED, err
+		return scaling.ScalingStatusFailed, err
 	}
 	s.logger.Info(
 		fmt.Sprintf("Current instances for %s: %d", workloadName, currentInstanceCount),
@@ -106,25 +106,25 @@ func (s *Scaler) Scale(ctx context.Context, scaledObjectMetrics *pb.ScaledObject
 			"resource", workloadName,
 		)
 		if err := s.updateInstanceCount(ctx, 0, workloadInfo); err != nil {
-			return pb.ScalingStatus_FAILED, err
+			return scaling.ScalingStatusFailed, err
 		}
-		return pb.ScalingStatus_SUCCEEDED, nil
+		return scaling.ScalingStatusSucceeded, nil
 	}
 
 	for _, metric := range scaledObjectMetrics.Metrics {
 		var recommendation int
-		if hasTargetAverageValue(metric) && metric.GetTargetAverageValue() > 0 {
+		if metric.HasTargetAverageValue() && metric.GetTargetAverageValue() > 0 {
 			recommendation = MakeTargetAverageValueRecommendation(metric.Value, metric.GetTargetAverageValue(), currentInstanceCount)
-		} else if hasTargetValue(metric) && metric.GetTargetValue() > 0 {
+		} else if metric.HasTargetValue() && metric.GetTargetValue() > 0 {
 			recommendation = MakeTargetValueRecommendation(metric.Value, metric.GetTargetValue(), currentInstanceCount)
 		} else {
 			s.logger.Info(
-				fmt.Sprintf("Target value and target average value for %s are 0. At least one must be a non-zero value. Skipping scaling workload %s on the trigger.", metric.TriggerId, workloadName),
+				fmt.Sprintf("Target value and target average value for %s are 0. At least one must be a non-zero value. Skipping scaling workload %s on the trigger.", metric.TriggerID, workloadName),
 			)
 			continue
 		}
 		s.logger.Info(
-			fmt.Sprintf("Recommendation for %s based on scaling trigger %s: %d", workloadName, metric.TriggerId, recommendation),
+			fmt.Sprintf("Recommendation for %s based on scaling trigger %s: %d", workloadName, metric.TriggerID, recommendation),
 		)
 
 		if s.staticConfig.OutputScalerMetrics {
@@ -139,10 +139,10 @@ func (s *Scaler) Scale(ctx context.Context, scaledObjectMetrics *pb.ScaledObject
 		s.logger.Info(
 			fmt.Sprintf("No valid triggers found for %s. Skipping scaling workload.", workloadName),
 		)
-		return pb.ScalingStatus_FAILED, nil
+		return scaling.ScalingStatusFailed, nil
 	}
 
-	var scalerConfig *pb.Advanced_ScalerConfig
+	var scalerConfig *scaling.ScalerConfig
 	if scaledObjectMetrics.ScaledObject != nil && scaledObjectMetrics.ScaledObject.Advanced != nil {
 		scalerConfig = scaledObjectMetrics.ScaledObject.Advanced.ScalerConfig
 	}
@@ -162,7 +162,7 @@ func (s *Scaler) Scale(ctx context.Context, scaledObjectMetrics *pb.ScaledObject
 		workloadName,
 	)
 	if err != nil {
-		return pb.ScalingStatus_FAILED, err
+		return scaling.ScalingStatusFailed, err
 	}
 
 	s.logger.Info(
@@ -172,7 +172,7 @@ func (s *Scaler) Scale(ctx context.Context, scaledObjectMetrics *pb.ScaledObject
 	)
 	if newInstanceCount != currentInstanceCount {
 		if err := s.updateInstanceCount(ctx, newInstanceCount, workloadInfo); err != nil {
-			return pb.ScalingStatus_FAILED, err
+			return scaling.ScalingStatusFailed, err
 		}
 		scalingStabilizer.MarkScaleEvent(scalerConfig.GetBehavior(), now, currentInstanceCount, newInstanceCount)
 	} else {
@@ -186,14 +186,14 @@ func (s *Scaler) Scale(ctx context.Context, scaledObjectMetrics *pb.ScaledObject
 		s.emitInstanceCountMetrics(ctx, unboundedRecommendation, newInstanceCount, workloadInfo)
 	}
 
-	return pb.ScalingStatus_SUCCEEDED, nil
+	return scaling.ScalingStatusSucceeded, nil
 }
 
 func (s *Scaler) getBoundedRecommendation(
 	currentInstanceCount int,
 	unboundedRecommendation int,
 	scalingStabilizer *ScalingStabilizer,
-	scalerConfig *pb.Advanced_ScalerConfig,
+	scalerConfig *scaling.ScalerConfig,
 	now time.Time,
 	workloadName string,
 ) (int, error) {
@@ -265,17 +265,17 @@ func (s *Scaler) emitInstanceCountMetrics(ctx context.Context, recommendedInstan
 	}
 }
 
-func (s *Scaler) emitTriggerMetrics(ctx context.Context, metric *pb.Metric, workloadInfo WorkloadInfo) {
+func (s *Scaler) emitTriggerMetrics(ctx context.Context, metric *scaling.Metric, workloadInfo WorkloadInfo) {
 	metricLabels := map[string]string{
 		"project_id":       s.projectID,
 		"consumer_service": workloadInfo.Name,
-		"trigger_id":       metric.TriggerId,
+		"trigger_id":       metric.TriggerID,
 	}
 	if err := s.metricsService.WriteMetricIgnoreFailure(ctx, metric.TriggerType+"/"+metricValueMetricName, metric.Value, metricLabels); err != nil {
 		s.logger.Error(err, "Failed to write metrics to Cloud Monitoring.")
 		return
 	}
-	if hasTargetAverageValue(metric) {
+	if metric.HasTargetAverageValue() {
 		if err := s.metricsService.WriteMetricIgnoreFailure(ctx, metric.TriggerType+"/"+targetAverageValueMetricName, metric.GetTargetAverageValue(), metricLabels); err != nil {
 			s.logger.Error(err, "Failed to write metrics to Cloud Monitoring.")
 		}
@@ -284,16 +284,4 @@ func (s *Scaler) emitTriggerMetrics(ctx context.Context, metric *pb.Metric, work
 			s.logger.Error(err, "Failed to write metrics to Cloud Monitoring.")
 		}
 	}
-}
-
-// hasTargetAverageValue reports whether the metric's target is a per-instance target average value.
-func hasTargetAverageValue(metric *pb.Metric) bool {
-	_, ok := metric.GetTarget().(*pb.Metric_TargetAverageValue)
-	return ok
-}
-
-// hasTargetValue reports whether the metric's target is a total target value.
-func hasTargetValue(metric *pb.Metric) bool {
-	_, ok := metric.GetTarget().(*pb.Metric_TargetValue)
-	return ok
 }

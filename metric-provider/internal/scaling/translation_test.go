@@ -19,13 +19,16 @@ import (
 	"testing"
 
 	"crema/metric-provider/api"
-	pb "crema/metric-provider/proto"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	v2 "k8s.io/api/autoscaling/v2"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func floatPtr(v float64) *float64 {
+	return &v
+}
 
 func TestToKedaScaledObjects(t *testing.T) {
 	tests := []struct {
@@ -63,13 +66,14 @@ func TestToKedaScaledObjects(t *testing.T) {
 		},
 		{
 			name: "scaled object with no scale target ref",
-			cremaConfig: api.CremaConfig{Spec: api.CremaConfigSpec{
-				ScaledObjects: []api.CremaScaledObject{
-					{
-						Spec: kedav1alpha1.ScaledObjectSpec{},
+			cremaConfig: api.CremaConfig{
+				Spec: api.CremaConfigSpec{
+					ScaledObjects: []api.CremaScaledObject{
+						{
+							Spec: kedav1alpha1.ScaledObjectSpec{},
+						},
 					},
 				},
-			},
 			},
 			want: nil,
 		},
@@ -155,7 +159,7 @@ func TestPopulateTargetValue(t *testing.T) {
 		name       string
 		metric     float64
 		kedaTarget v2.MetricTarget
-		want       *pb.Metric
+		want       *Metric
 	}{
 		{
 			name:   "average value",
@@ -164,11 +168,9 @@ func TestPopulateTargetValue(t *testing.T) {
 				Type:         v2.AverageValueMetricType,
 				AverageValue: parseQuantity("10"),
 			},
-			want: &pb.Metric{
-				Value: 10,
-				Target: &pb.Metric_TargetAverageValue{
-					TargetAverageValue: 10,
-				},
+			want: &Metric{
+				Value:              10,
+				TargetAverageValue: floatPtr(10),
 			},
 		},
 		{
@@ -178,11 +180,9 @@ func TestPopulateTargetValue(t *testing.T) {
 				Type:  v2.ValueMetricType,
 				Value: parseQuantity("20"),
 			},
-			want: &pb.Metric{
-				Value: 20,
-				Target: &pb.Metric_TargetValue{
-					TargetValue: 20,
-				},
+			want: &Metric{
+				Value:       20,
+				TargetValue: floatPtr(20),
 			},
 		},
 		{
@@ -192,11 +192,9 @@ func TestPopulateTargetValue(t *testing.T) {
 				Type:         v2.AverageValueMetricType,
 				AverageValue: parseQuantity("0.05"),
 			},
-			want: &pb.Metric{
-				Value: 0.005,
-				Target: &pb.Metric_TargetAverageValue{
-					TargetAverageValue: 0.05,
-				},
+			want: &Metric{
+				Value:              0.005,
+				TargetAverageValue: floatPtr(0.05),
 			},
 		},
 		{
@@ -206,17 +204,15 @@ func TestPopulateTargetValue(t *testing.T) {
 				Type:  v2.ValueMetricType,
 				Value: parseQuantity("0.005"),
 			},
-			want: &pb.Metric{
-				Value: 0.005,
-				Target: &pb.Metric_TargetValue{
-					TargetValue: 0.005,
-				},
+			want: &Metric{
+				Value:       0.005,
+				TargetValue: floatPtr(0.005),
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := &pb.Metric{Value: tt.metric}
+			got := &Metric{Value: tt.metric}
 			PopulateTargetValue(tt.kedaTarget, got)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("PopulateTargetValue() = %v, want %v", got, tt.want)
@@ -230,7 +226,7 @@ func parseQuantity(s string) *resource.Quantity {
 	return &q
 }
 
-func TestToPbScaledObject(t *testing.T) {
+func TestToScaledObject(t *testing.T) {
 	type args struct {
 		kedaScaledObjectSpec kedav1alpha1.ScaledObjectSpec
 	}
@@ -247,7 +243,7 @@ func TestToPbScaledObject(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want *pb.ScaledObject
+		want *ScaledObject
 	}{
 		{
 			name: "Test with advanced config and replica counts",
@@ -288,30 +284,30 @@ func TestToPbScaledObject(t *testing.T) {
 					},
 				},
 			},
-			want: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{
+			want: &ScaledObject{
+				ScaleTargetRef: &ScaleTargetRef{
 					Name: "test-target",
 				},
-				Advanced: &pb.Advanced{
-					ScalerConfig: &pb.Advanced_ScalerConfig{
-						Behavior: &pb.Advanced_ScalerConfig_Behavior{
-							ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
+				Advanced: &Advanced{
+					ScalerConfig: &ScalerConfig{
+						Behavior: &Behavior{
+							ScaleDown: &ScalingRules{
 								StabilizationWindowSeconds: 300,
-								SelectPolicy:               pb.Advanced_ScalerConfig_Behavior_Scaling_MIN,
-								Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{
+								SelectPolicy:               SelectPolicyMin,
+								Policies: []*Policy{
 									{
-										Type:          pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES,
+										Type:          PolicyTypeInstances,
 										Value:         1,
 										PeriodSeconds: 60,
 									},
 								},
 							},
-							ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{
+							ScaleUp: &ScalingRules{
 								StabilizationWindowSeconds: 0,
-								SelectPolicy:               pb.Advanced_ScalerConfig_Behavior_Scaling_MAX,
-								Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{
+								SelectPolicy:               SelectPolicyMax,
+								Policies: []*Policy{
 									{
-										Type:          pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT,
+										Type:          PolicyTypePercent,
 										Value:         10,
 										PeriodSeconds: 30,
 									},
@@ -361,30 +357,30 @@ func TestToPbScaledObject(t *testing.T) {
 					},
 				},
 			},
-			want: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{
+			want: &ScaledObject{
+				ScaleTargetRef: &ScaleTargetRef{
 					Name: "test-target",
 				},
-				Advanced: &pb.Advanced{
-					ScalerConfig: &pb.Advanced_ScalerConfig{
-						Behavior: &pb.Advanced_ScalerConfig_Behavior{
-							ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
+				Advanced: &Advanced{
+					ScalerConfig: &ScalerConfig{
+						Behavior: &Behavior{
+							ScaleDown: &ScalingRules{
 								StabilizationWindowSeconds: 300,
-								SelectPolicy:               pb.Advanced_ScalerConfig_Behavior_Scaling_MIN,
-								Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{
+								SelectPolicy:               SelectPolicyMin,
+								Policies: []*Policy{
 									{
-										Type:          pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES,
+										Type:          PolicyTypeInstances,
 										Value:         1,
 										PeriodSeconds: 60,
 									},
 								},
 							},
-							ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{
+							ScaleUp: &ScalingRules{
 								StabilizationWindowSeconds: 0,
-								SelectPolicy:               pb.Advanced_ScalerConfig_Behavior_Scaling_MAX,
-								Policies: []*pb.Advanced_ScalerConfig_Behavior_Scaling_Policy{
+								SelectPolicy:               SelectPolicyMax,
+								Policies: []*Policy{
 									{
-										Type:          pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT,
+										Type:          PolicyTypePercent,
 										Value:         10,
 										PeriodSeconds: 30,
 									},
@@ -418,18 +414,18 @@ func TestToPbScaledObject(t *testing.T) {
 					},
 				},
 			},
-			want: &pb.ScaledObject{
-				ScaleTargetRef: &pb.ScaleTargetRef{
+			want: &ScaledObject{
+				ScaleTargetRef: &ScaleTargetRef{
 					Name: "test-target-nil",
 				},
-				Advanced: &pb.Advanced{
-					ScalerConfig: &pb.Advanced_ScalerConfig{
-						Behavior: &pb.Advanced_ScalerConfig_Behavior{
-							ScaleDown: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-								SelectPolicy: pb.Advanced_ScalerConfig_Behavior_Scaling_MAX,
+				Advanced: &Advanced{
+					ScalerConfig: &ScalerConfig{
+						Behavior: &Behavior{
+							ScaleDown: &ScalingRules{
+								SelectPolicy: SelectPolicyMax,
 							},
-							ScaleUp: &pb.Advanced_ScalerConfig_Behavior_Scaling{
-								SelectPolicy: pb.Advanced_ScalerConfig_Behavior_Scaling_MAX,
+							ScaleUp: &ScalingRules{
+								SelectPolicy: SelectPolicyMax,
 							},
 						},
 					},
@@ -439,104 +435,104 @@ func TestToPbScaledObject(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ToPbScaledObject(tt.args.kedaScaledObjectSpec); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ToPbScaledObject() = %v, want %v", got, tt.want)
+			if got := ToScaledObject(tt.args.kedaScaledObjectSpec); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ToScaledObject() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestToPbScalingPolicyType(t *testing.T) {
+func TestToScalingPolicyType(t *testing.T) {
 	tests := []struct {
 		name string
 		arg  v2.HPAScalingPolicyType
-		want *pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_Type
+		want *PolicyType
 	}{
 		{
 			name: "pods scaling policy",
 			arg:  v2.PodsScalingPolicy,
-			want: func() *pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_Type {
-				p := pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_INSTANCES
+			want: func() *PolicyType {
+				p := PolicyTypeInstances
 				return &p
 			}(),
 		},
 		{
 			name: "percent scaling policy",
 			arg:  v2.PercentScalingPolicy,
-			want: func() *pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_Type {
-				p := pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_PERCENT
+			want: func() *PolicyType {
+				p := PolicyTypePercent
 				return &p
 			}(),
 		},
 		{
 			name: "unspecified scaling policy",
 			arg:  "unknown",
-			want: func() *pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_Type {
-				p := pb.Advanced_ScalerConfig_Behavior_Scaling_Policy_TYPE_UNSPECIFIED
+			want: func() *PolicyType {
+				p := PolicyTypeUnspecified
 				return &p
 			}(),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := toPbScalingPolicyType(tt.arg); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("toPbScalingPolicyType() = %v, want %v", got, tt.want)
+			if got := toScalingPolicyType(tt.arg); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("toScalingPolicyType() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestToPbSelectPolicy(t *testing.T) {
+func TestToSelectPolicy(t *testing.T) {
 	tests := []struct {
 		name string
 		arg  *v2.ScalingPolicySelect
-		want *pb.Advanced_ScalerConfig_Behavior_Scaling_SelectPolicy
+		want *SelectPolicy
 	}{
 		{
 			name: "min change policy",
 			arg:  func() *v2.ScalingPolicySelect { s := v2.MinChangePolicySelect; return &s }(),
-			want: func() *pb.Advanced_ScalerConfig_Behavior_Scaling_SelectPolicy {
-				p := pb.Advanced_ScalerConfig_Behavior_Scaling_MIN
+			want: func() *SelectPolicy {
+				p := SelectPolicyMin
 				return &p
 			}(),
 		},
 		{
 			name: "max change policy",
 			arg:  func() *v2.ScalingPolicySelect { s := v2.MaxChangePolicySelect; return &s }(),
-			want: func() *pb.Advanced_ScalerConfig_Behavior_Scaling_SelectPolicy {
-				p := pb.Advanced_ScalerConfig_Behavior_Scaling_MAX
+			want: func() *SelectPolicy {
+				p := SelectPolicyMax
 				return &p
 			}(),
 		},
 		{
 			name: "disabled policy",
 			arg:  func() *v2.ScalingPolicySelect { s := v2.DisabledPolicySelect; return &s }(),
-			want: func() *pb.Advanced_ScalerConfig_Behavior_Scaling_SelectPolicy {
-				p := pb.Advanced_ScalerConfig_Behavior_Scaling_DISABLED
+			want: func() *SelectPolicy {
+				p := SelectPolicyDisabled
 				return &p
 			}(),
 		},
 		{
 			name: "nil policy",
 			arg:  nil,
-			want: func() *pb.Advanced_ScalerConfig_Behavior_Scaling_SelectPolicy {
-				p := pb.Advanced_ScalerConfig_Behavior_Scaling_MAX
+			want: func() *SelectPolicy {
+				p := SelectPolicyMax
 				return &p
 			}(),
 		},
 		{
 			name: "unspecified policy",
 			arg:  func() *v2.ScalingPolicySelect { s := v2.ScalingPolicySelect("unknown"); return &s }(),
-			want: func() *pb.Advanced_ScalerConfig_Behavior_Scaling_SelectPolicy {
-				p := pb.Advanced_ScalerConfig_Behavior_Scaling_MAX
+			want: func() *SelectPolicy {
+				p := SelectPolicyMax
 				return &p
 			}(),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := toPbSelectPolicy(tt.arg); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("toPbSelectPolicy() = %v, want %v", got, tt.want)
+			if got := toSelectPolicy(tt.arg); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("toSelectPolicy() = %v, want %v", got, tt.want)
 			}
 		})
 	}
