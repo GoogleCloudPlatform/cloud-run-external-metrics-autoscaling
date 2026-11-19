@@ -197,4 +197,39 @@ func TestScalersManager(t *testing.T) {
 			t.Errorf("expected second workload to succeed, got %+v", resp.Results[1])
 		}
 	})
+
+	t.Run("scale_callerContextCancelled_stillCompletesWithTimeoutBound", func(t *testing.T) {
+		var observedHasDeadline bool
+		var observedErr error
+		crClient := &mockCloudRunClient{
+			getServiceInstanceCountFunc: func(callCtx context.Context, name, proj, loc string) (int, error) {
+				_, observedHasDeadline = callCtx.Deadline()
+				observedErr = callCtx.Err()
+				return 1, nil
+			},
+		}
+		sm := NewScalersManager(crClient, &mockCloudMonitoringClient{}, &logger)
+		som := &pb.ScaledObjectMetrics{
+			ScaledObject: &pb.ScaledObject{
+				ScaleTargetRef: &pb.ScaleTargetRef{Name: targetName},
+			},
+		}
+
+		cancelledCtx, cancel := context.WithCancel(ctx)
+		cancel()
+
+		resp, err := sm.Scale(cancelledCtx, &pb.ScaleRequest{ScaledObjectMetrics: []*pb.ScaledObjectMetrics{som}})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(resp.Results) != 1 || resp.Results[0].Status != pb.ScalingStatus_SUCCEEDED {
+			t.Errorf("expected scaling to succeed with detached context, got %+v", resp.Results)
+		}
+		if !observedHasDeadline {
+			t.Errorf("expected detached scaleCtx to carry a timeout deadline")
+		}
+		if observedErr != nil {
+			t.Errorf("expected detached scaleCtx not to be cancelled when caller ctx is cancelled, got %v", observedErr)
+		}
+	})
 }

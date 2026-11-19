@@ -18,11 +18,14 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	pb "crema/metric-provider/proto"
 
 	"github.com/go-logr/logr"
 )
+
+const scaleTimeout = 60 * time.Second
 
 // ScalersManager manages scaler instances for all scaled objects.
 type ScalersManager struct {
@@ -61,6 +64,11 @@ func (m *ScalersManager) Scale(ctx context.Context, req *pb.ScaleRequest) (*pb.S
 	var wg sync.WaitGroup
 	wg.Add(len(metricsList))
 
+	// Detach from caller cancellation so in-flight Cloud Run / Monitoring calls complete once accepted,
+	// bounded by scaleTimeout so a stalled network call cannot hold a workload lock indefinitely.
+	scaleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), scaleTimeout)
+	defer cancel()
+
 	for i, som := range metricsList {
 		go func(idx int, scaledObjectMetrics *pb.ScaledObjectMetrics) {
 			defer wg.Done()
@@ -88,7 +96,7 @@ func (m *ScalersManager) Scale(ctx context.Context, req *pb.ScaleRequest) (*pb.S
 				return
 			}
 
-			status, err := scaler.Scale(ctx, scaledObjectMetrics)
+			status, err := scaler.Scale(scaleCtx, scaledObjectMetrics)
 			if err != nil {
 				m.logger.Error(err, fmt.Sprintf("Failed to scale %s", scaleTargetName))
 				results[idx] = &pb.ScalingResult{
