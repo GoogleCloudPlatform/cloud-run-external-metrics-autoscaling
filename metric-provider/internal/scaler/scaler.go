@@ -17,6 +17,7 @@ package scaler
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	pb "crema/metric-provider/proto"
@@ -39,6 +40,7 @@ type MetricWriter interface {
 
 // Scaler performs scaling logic for a single ScaledObject.
 type Scaler struct {
+	mu                 sync.Mutex
 	scalingStabilizers map[string]*ScalingStabilizer
 	cloudRunClient     CloudRunClient
 	metricsService     MetricWriter
@@ -67,6 +69,9 @@ func NewScaler(
 
 // Scale scales the target Cloud Run service or worker pool based on the provided metrics.
 func (s *Scaler) Scale(ctx context.Context, scaledObjectMetrics *pb.ScaledObjectMetrics) (pb.ScalingStatus, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	now := time.Now()
 
 	var workloadName string
