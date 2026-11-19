@@ -174,3 +174,81 @@ func TestJSONFormatInitialization(t *testing.T) {
 		t.Errorf("Expected JSON error payload to contain custom err keys, got: %q", errStr)
 	}
 }
+
+func TestScalerComponentAndVerbosityFiltering(t *testing.T) {
+	t.Run("plainText_withScalerComponent_formatsScalerPrefixAndSuppressesDebug", func(t *testing.T) {
+		oldStdout := os.Stdout
+		rOut, wOut, _ := os.Pipe()
+		os.Stdout = wOut
+
+		logger := NewLogger().WithName("scaler")
+		logger.Info("Recommendation was clamped to range", "resource", "projects/my-proj/locations/us-central1/workerpools/my-pool", "minReplicaCount", 1, "maxReplicaCount", 100)
+		logger.V(1).Info("debug log should be suppressed")
+
+		wOut.Close()
+		os.Stdout = oldStdout
+
+		var bufOut bytes.Buffer
+		io.Copy(&bufOut, rOut)
+		rOut.Close()
+
+		outStr := bufOut.String()
+		if !strings.Contains(outStr, "[INFO] [SCALER] Recommendation was clamped to range") {
+			t.Errorf("Expected [INFO] [SCALER] prefix, got: %q", outStr)
+		}
+		if !strings.Contains(outStr, "resource=projects/my-proj/locations/us-central1/workerpools/my-pool") {
+			t.Errorf("Expected resource key-value pair, got: %q", outStr)
+		}
+		if strings.Contains(outStr, "debug log should be suppressed") {
+			t.Errorf("Expected V(1) debug log to be suppressed, got: %q", outStr)
+		}
+	})
+
+	t.Run("jsonFormat_withScalerComponent_setsComponentScaler", func(t *testing.T) {
+		os.Setenv("LOG_FORMAT", "json")
+		defer os.Unsetenv("LOG_FORMAT")
+
+		oldStdout := os.Stdout
+		rOut, wOut, _ := os.Pipe()
+		os.Stdout = wOut
+
+		logger := NewLogger().WithName("scaler")
+		logger.Info("Recommendation was clamped to range", "resource", "projects/my-proj/locations/us-central1/workerpools/my-pool", "minReplicaCount", 1, "maxReplicaCount", 100)
+
+		wOut.Close()
+		os.Stdout = oldStdout
+
+		var bufOut bytes.Buffer
+		io.Copy(&bufOut, rOut)
+		rOut.Close()
+
+		outStr := bufOut.String()
+		if !strings.Contains(outStr, `"component":"scaler"`) {
+			t.Errorf("Expected component scaler in JSON, got: %q", outStr)
+		}
+		if !strings.Contains(outStr, `"minReplicaCount":1`) || !strings.Contains(outStr, `"maxReplicaCount":100`) {
+			t.Errorf("Expected numeric replica counts in JSON, got: %q", outStr)
+		}
+	})
+
+	t.Run("withNonCremaComponentName_preservesMetricProviderComponent", func(t *testing.T) {
+		oldStdout := os.Stdout
+		rOut, wOut, _ := os.Pipe()
+		os.Stdout = wOut
+
+		logger := NewLogger().WithName("gcp_pubsub_scaler")
+		logger.Info("polling pubsub subscription")
+
+		wOut.Close()
+		os.Stdout = oldStdout
+
+		var bufOut bytes.Buffer
+		io.Copy(&bufOut, rOut)
+		rOut.Close()
+
+		outStr := bufOut.String()
+		if !strings.Contains(outStr, "[INFO] [METRIC-PROVIDER] polling pubsub subscription") {
+			t.Errorf("Expected KEDA logger to preserve [METRIC-PROVIDER] component, got: %q", outStr)
+		}
+	})
+}

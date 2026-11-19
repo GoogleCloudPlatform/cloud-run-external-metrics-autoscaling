@@ -14,41 +14,8 @@
 # limitations under the License.
 #
 
-# This Dockerfile builds both scaler (Java) and metric-provider (Go)
-# into a container image.
+# This Dockerfile builds CREMA into a container image.
 ARG SRC_DIR=/
-
-# --- Java Builder ---
-FROM gcr.io/cloud-marketplace/google/ubuntu2204 AS java_builder
-ARG SRC_DIR
-
-# Install necessary dependencies for Bazel and the build
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    openjdk-21-jdk-headless \
-    unzip \
-    zip \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install bazelisk which will use the .bazelversion file
-RUN wget https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64 -O /usr/local/bin/bazel && \
-    chmod +x /usr/local/bin/bazel
-
-# Create and use  non-root user to run the build otherwise bazel fails with:
-# `The current user is root, please run as non-root when using the hermetic Python interpreter.`
-RUN useradd -ms /bin/bash nonroot
-
-WORKDIR /workspace
-
-COPY ${SRC_DIR}/scaler/ .
-COPY ${SRC_DIR}/proto ./proto
-
-RUN chown -R nonroot:nonroot /workspace
-USER nonroot
-
-# Build the Java binary
-RUN bazel build src/main/java/com/google/cloud/run/crema:scaler_server_deploy.jar
 
 # --- Go Builder ---
 FROM gcr.io/cloud-marketplace/google/ubuntu2204 AS go_builder
@@ -64,9 +31,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Go
-RUN wget https://go.dev/dl/go1.25.8.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go1.25.8.linux-amd64.tar.gz && \
-    rm go1.25.8.linux-amd64.tar.gz
+RUN wget https://go.dev/dl/go1.26.9.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.26.9.linux-amd64.tar.gz && \
+    rm go1.26.9.linux-amd64.tar.gz
 
 # Set Go paths
 ENV PATH="/usr/local/go/bin:/root/go/bin:${PATH}"
@@ -89,13 +56,8 @@ RUN protoc --proto_path=. \
 # Build the Go app from the metric-provider directory
 WORKDIR /app/metric-provider
 RUN go mod download
-RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o main -ldflags "-w -s" .
 RUN chmod +x main
-
-# Make entrypoint script executable for the final image
-COPY ${SRC_DIR}/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 
 # --- Final Image ---
 FROM scratch
@@ -104,18 +66,9 @@ ARG SRC_DIR
 ENV APP_DIR=/app
 WORKDIR $APP_DIR
 
-# Copy Java app
-COPY --from=java_builder /workspace/src/main/java/com/google/cloud/run/crema/logging.properties $APP_DIR/logging.properties
-COPY --from=java_builder /workspace/bazel-bin/src/main/java/com/google/cloud/run/crema/scaler_server_deploy.jar $APP_DIR/scaler_server.jar
-
 # Copy Go app
 COPY --from=go_builder /app/metric-provider/main $APP_DIR/metric-provider
 
-# Copy entrypoint script
-COPY --from=go_builder /app/entrypoint.sh $APP_DIR/entrypoint.sh
-
-ENV JAVA_TOOL_OPTIONS="-Djava.util.logging.config.file=$APP_DIR/logging.properties"
-
 EXPOSE 8080
 
-CMD ["/app/entrypoint.sh"]
+CMD ["/app/metric-provider"]

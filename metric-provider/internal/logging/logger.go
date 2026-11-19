@@ -37,6 +37,14 @@ type logSink struct {
 	cloudLogger  *logging.Logger
 	values       []interface{}
 	jsonFormat   bool
+	component    string
+}
+
+func (ls logSink) getComponent() string {
+	if ls.component == "" {
+		return "metric-provider"
+	}
+	return ls.component
 }
 
 // NewLogger creates a new logr.Logger that writes to stdout.
@@ -90,33 +98,35 @@ func (ls logSink) Init(info logr.RuntimeInfo) {
 
 // Required for logr interface
 func (ls logSink) Enabled(level int) bool {
-	return true
+	return level <= 0
 }
 
 func (ls logSink) Info(level int, msg string, keysAndValues ...interface{}) {
 	kvs := append(ls.values, keysAndValues...)
+	comp := ls.getComponent()
 	if ls.jsonFormat {
 		payload := make(map[string]interface{})
 		payload["severity"] = "INFO"
-		payload["component"] = "metric-provider"
+		payload["component"] = comp
 		payload["message"] = msg
 		populateKVs(payload, kvs)
 		if jsonBytes, err := json.Marshal(payload); err == nil {
 			ls.stdOutLogger.Println(string(jsonBytes))
 		}
 	} else {
-		ls.stdOutLogger.Printf("[INFO] [METRIC-PROVIDER] %s %s\n", msg, ls.formatKVs(kvs))
+		ls.stdOutLogger.Printf("[INFO] [%s] %s %s\n", strings.ToUpper(comp), msg, ls.formatKVs(kvs))
 	}
 }
 
 func (ls logSink) Error(err error, msg string, keysAndValues ...interface{}) {
 	kvs := append(ls.values, keysAndValues...)
+	comp := ls.getComponent()
 	fullMsg := fmt.Sprintf("%s: %v", msg, err)
-	formattedMsg := fmt.Sprintf("[ERROR] [METRIC-PROVIDER] %s %s\n", fullMsg, ls.formatKVs(kvs))
+	formattedMsg := fmt.Sprintf("[ERROR] [%s] %s %s\n", strings.ToUpper(comp), fullMsg, ls.formatKVs(kvs))
 
 	if ls.cloudLogger != nil {
 		payload := make(map[string]interface{})
-		payload["component"] = "metric-provider"
+		payload["component"] = comp
 		payload["message"] = fullMsg
 		populateKVs(payload, kvs)
 
@@ -128,7 +138,7 @@ func (ls logSink) Error(err error, msg string, keysAndValues ...interface{}) {
 		if ls.jsonFormat {
 			payload := make(map[string]interface{})
 			payload["severity"] = "ERROR"
-			payload["component"] = "metric-provider"
+			payload["component"] = comp
 			payload["message"] = fullMsg
 			populateKVs(payload, kvs)
 			if jsonBytes, err := json.Marshal(payload); err == nil {
@@ -147,7 +157,11 @@ func (ls logSink) WithValues(keysAndValues ...interface{}) logr.LogSink {
 }
 
 func (ls logSink) WithName(name string) logr.LogSink {
-	return ls
+	newLogger := ls
+	if name == "scaler" || name == "metric-provider" {
+		newLogger.component = name
+	}
+	return newLogger
 }
 
 func (ls logSink) formatKVs(keysAndValues []interface{}) string {

@@ -27,6 +27,7 @@ import (
 	"crema/metric-provider/internal/config"
 	"crema/metric-provider/internal/orchestrator"
 	"crema/metric-provider/internal/resolvers"
+	"crema/metric-provider/internal/scaler"
 	"crema/metric-provider/internal/scaling"
 
 	"github.com/go-logr/logr"
@@ -35,7 +36,6 @@ import (
 
 const (
 	port                     = "8080"
-	scalerAddress            = "localhost:50051"
 	cremaConfigEnvVar        = "CREMA_CONFIG"
 	defaultGlobalHttpTimeout = 30 * time.Second
 	shutdownTimeout          = 5 * time.Second
@@ -81,10 +81,18 @@ func New(logger *logr.Logger) (*Server, error) {
 		return nil, fmt.Errorf("failed to create secret manager client: %w", err)
 	}
 
-	scalerServerClient, err := clients.ScalerServer(scalerAddress)
+	cloudRunClient, err := clients.NewCloudRunClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create scaler client: %w", err)
+		return nil, fmt.Errorf("failed to create cloud run client: %w", err)
 	}
+
+	logger.WithName("scaler").Info("Creating MetricServiceClient...")
+	cloudMonitoringClient, err := clients.NewCloudMonitoringClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cloud monitoring client: %w", err)
+	}
+
+	scalersManager := scaler.NewScalersManager(cloudRunClient, cloudMonitoringClient, logger)
 
 	matches := parameterVersionRegex.FindStringSubmatch(configID)
 	if matches == nil {
@@ -118,11 +126,11 @@ func New(logger *logr.Logger) (*Server, error) {
 	authResolver := resolvers.NewAuthResolver(secretManagerClient)
 	builderFactory := scaling.NewBuilderFactory(authResolver, defaultGlobalHttpTimeout, logger)
 	stateProvider := scaling.NewStateProvider(logger)
-	orchestrator := orchestrator.New(scalerServerClient, &cremaConfig, builderFactory, stateProvider, logger)
+	orchestrator := orchestrator.New(scalersManager, &cremaConfig, builderFactory, stateProvider, logger)
 
 	return &Server{
 		scalingOrchestrator: orchestrator,
-		scalerServerClient:  scalerServerClient,
+		scalerServerClient:  scalersManager,
 		pollingInterval:     pollingInterval,
 		logger:              logger,
 	}, nil
