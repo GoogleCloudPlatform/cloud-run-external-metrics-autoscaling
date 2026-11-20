@@ -17,10 +17,15 @@ package clients
 import (
 	"context"
 	"fmt"
+	"time"
 
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"cloud.google.com/go/monitoring/apiv3/v2/monitoringpb"
 )
+
+// createTimeSeriesTimeout is the client library's own default for CreateTimeSeries. The library
+// only applies its default when the context has no deadline, and scale calls always have one.
+const createTimeSeriesTimeout = 12 * time.Second
 
 // CloudMonitoringClient is a wrapper around the Cloud Monitoring MetricClient.
 type CloudMonitoringClient struct {
@@ -38,6 +43,8 @@ func NewCloudMonitoringClient(ctx context.Context) (*CloudMonitoringClient, erro
 
 // CreateTimeSeries writes time series data to Cloud Monitoring.
 func (c *CloudMonitoringClient) CreateTimeSeries(ctx context.Context, req *monitoringpb.CreateTimeSeriesRequest) error {
+	ctx, cancel := context.WithTimeout(ctx, createTimeSeriesTimeout)
+	defer cancel()
 	return c.client.CreateTimeSeries(ctx, req)
 }
 
