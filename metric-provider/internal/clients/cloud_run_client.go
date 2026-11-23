@@ -15,21 +15,29 @@
 package clients
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/go-logr/logr"
 	"google.golang.org/api/option"
 	"google.golang.org/api/run/v2"
 )
 
+const (
+	defaultOpPollInterval = 5 * time.Second
+	defaultOpPollTimeout  = 5 * time.Minute
+)
+
 type servicesAPI interface {
 	getService(ctx context.Context, name string) (*run.GoogleCloudRunV2Service, error)
-	updateService(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) error
+	updateService(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) (*run.GoogleLongrunningOperation, error)
 }
 
 type workerPoolsAPI interface {
 	getWorkerPool(ctx context.Context, name string) (*run.GoogleCloudRunV2WorkerPool, error)
-	updateWorkerPool(ctx context.Context, name string, workerPool *run.GoogleCloudRunV2WorkerPool, updateMask string) error
+	updateWorkerPool(ctx context.Context, name string, workerPool *run.GoogleCloudRunV2WorkerPool, updateMask string) (*run.GoogleLongrunningOperation, error)
 }
 
 type runServicesAPI struct {
@@ -40,9 +48,8 @@ func (r *runServicesAPI) getService(ctx context.Context, name string) (*run.Goog
 	return r.svc.Get(name).Context(ctx).Do()
 }
 
-func (r *runServicesAPI) updateService(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) error {
-	_, err := r.svc.Patch(name, service).UpdateMask(updateMask).Context(ctx).Do()
-	return err
+func (r *runServicesAPI) updateService(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) (*run.GoogleLongrunningOperation, error) {
+	return r.svc.Patch(name, service).UpdateMask(updateMask).Context(ctx).Do()
 }
 
 type runWorkerPoolsAPI struct {
@@ -53,26 +60,35 @@ func (r *runWorkerPoolsAPI) getWorkerPool(ctx context.Context, name string) (*ru
 	return r.wp.Get(name).Context(ctx).Do()
 }
 
-func (r *runWorkerPoolsAPI) updateWorkerPool(ctx context.Context, name string, workerPool *run.GoogleCloudRunV2WorkerPool, updateMask string) error {
-	_, err := r.wp.Patch(name, workerPool).UpdateMask(updateMask).Context(ctx).Do()
-	return err
+func (r *runWorkerPoolsAPI) updateWorkerPool(ctx context.Context, name string, workerPool *run.GoogleCloudRunV2WorkerPool, updateMask string) (*run.GoogleLongrunningOperation, error) {
+	return r.wp.Patch(name, workerPool).UpdateMask(updateMask).Context(ctx).Do()
 }
 
 // CloudRunClient is a thin wrapper around the Cloud Run v2 API.
 type CloudRunClient struct {
-	services    servicesAPI
-	workerPools workerPoolsAPI
+	services       servicesAPI
+	workerPools    workerPoolsAPI
+	getOperation   func(ctx context.Context, name string) (*run.GoogleLongrunningOperation, error)
+	logger         logr.Logger
+	opPollInterval time.Duration
+	opPollTimeout  time.Duration
 }
 
-// NewCloudRunClient creates a new CloudRunClient.
-func NewCloudRunClient(ctx context.Context, opts ...option.ClientOption) (*CloudRunClient, error) {
+// NewCloudRunClient creates a new CloudRunClient. The logger is used to report how update
+// operations end.
+func NewCloudRunClient(ctx context.Context, logger logr.Logger, opts ...option.ClientOption) (*CloudRunClient, error) {
 	runService, err := run.NewService(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cloud run service client: %w", err)
 	}
+	ops := run.NewProjectsLocationsOperationsService(runService)
 	return &CloudRunClient{
 		services:    &runServicesAPI{svc: run.NewProjectsLocationsServicesService(runService)},
 		workerPools: &runWorkerPoolsAPI{wp: run.NewProjectsLocationsWorkerPoolsService(runService)},
+		getOperation: func(ctx context.Context, name string) (*run.GoogleLongrunningOperation, error) {
+			return ops.Get(name).Context(ctx).Do()
+		},
+		logger: logger,
 	}, nil
 }
 
@@ -103,7 +119,8 @@ func (c *CloudRunClient) UpdateWorkerPoolManualInstances(ctx context.Context, wo
 		ForceSendFields:     []string{"ManualInstanceCount"},
 	}
 
-	return c.workerPools.updateWorkerPool(ctx, resourceName, currentWorkerPool, "scaling.manual_instance_count")
+	operation, err := c.workerPools.updateWorkerPool(ctx, resourceName, currentWorkerPool, "scaling.manual_instance_count")
+	return c.finishUpdate(resourceName, "failed to update worker pool", operation, err)
 }
 
 // GetServiceInstanceCount returns the instance count for a given service.
@@ -145,7 +162,7 @@ func (c *CloudRunClient) UpdateServiceMinInstances(ctx context.Context, serviceN
 	newTemplate.Scaling = &newScaling
 	currentService.Template = &newTemplate
 
-	return c.services.updateService(ctx, resourceName, currentService, "template.scaling.min_instance_count")
+	return c.updateService(ctx, resourceName, currentService, "template.scaling.min_instance_count")
 }
 
 // UpdateServiceManualInstances updates the number of manual instances for a given service.
@@ -162,7 +179,61 @@ func (c *CloudRunClient) UpdateServiceManualInstances(ctx context.Context, servi
 		ForceSendFields:     []string{"ManualInstanceCount"},
 	}
 
-	return c.services.updateService(ctx, resourceName, currentService, "scaling.manual_instance_count")
+	return c.updateService(ctx, resourceName, currentService, "scaling.manual_instance_count")
+}
+
+func (c *CloudRunClient) updateService(ctx context.Context, resourceName string, service *run.GoogleCloudRunV2Service, updateMask string) error {
+	operation, err := c.services.updateService(ctx, resourceName, service, updateMask)
+	return c.finishUpdate(resourceName, "failed to update service", operation, err)
+}
+
+func (c *CloudRunClient) finishUpdate(resourceName, action string, operation *run.GoogleLongrunningOperation, err error) error {
+	if err != nil {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+	c.logCompletionAsync(resourceName, operation)
+	return nil
+}
+
+// logCompletionAsync logs how an accepted update operation ends, without making the caller wait
+// for it. Cloud Run can accept an update and still fail it later; this is the only place such a
+// failure shows up.
+func (c *CloudRunClient) logCompletionAsync(resourceName string, operation *run.GoogleLongrunningOperation) {
+	if c.getOperation == nil || operation == nil {
+		return
+	}
+	timeout := cmp.Or(c.opPollTimeout, defaultOpPollTimeout)
+	log := c.logger.WithValues("resource", resourceName)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		if err := c.waitForOperation(ctx, operation); err != nil {
+			log.Error(err, "Update operation failed")
+			return
+		}
+		log.Info("Update operation completed")
+	}()
+}
+
+// waitForOperation polls the operation until it is done and returns any polling or operation error.
+func (c *CloudRunClient) waitForOperation(ctx context.Context, op *run.GoogleLongrunningOperation) error {
+	interval := cmp.Or(c.opPollInterval, defaultOpPollInterval)
+	for !op.Done {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for operation: %w", ctx.Err())
+		case <-time.After(interval):
+		}
+		var err error
+		if op, err = c.getOperation(ctx, op.Name); err != nil {
+			return fmt.Errorf("failed to check operation: %w", err)
+		}
+	}
+	if op.Error != nil {
+		return fmt.Errorf("%s (code %d)", op.Error.Message, op.Error.Code)
+	}
+	return nil
 }
 
 func (c *CloudRunClient) getWorkerPool(ctx context.Context, workerpoolName, projectID, region string) (*run.GoogleCloudRunV2WorkerPool, error) {

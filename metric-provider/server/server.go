@@ -81,7 +81,7 @@ func New(logger *logr.Logger) (*Server, error) {
 		return nil, fmt.Errorf("failed to create secret manager client: %w", err)
 	}
 
-	cloudRunClient, err := clients.NewCloudRunClient(ctx)
+	cloudRunClient, err := clients.NewCloudRunClient(ctx, logger.WithName("scaler"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cloud run client: %w", err)
 	}

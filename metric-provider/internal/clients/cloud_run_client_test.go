@@ -19,8 +19,12 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	"google.golang.org/api/run/v2"
 )
 
@@ -41,7 +45,7 @@ type updateServiceCall struct {
 
 type mockServicesAPI struct {
 	getServiceFunc    func(ctx context.Context, name string) (*run.GoogleCloudRunV2Service, error)
-	updateServiceFunc func(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) error
+	updateServiceFunc func(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) (*run.GoogleLongrunningOperation, error)
 	getCalls          []string
 	updateCalls       []updateServiceCall
 }
@@ -54,12 +58,12 @@ func (m *mockServicesAPI) getService(ctx context.Context, name string) (*run.Goo
 	return &run.GoogleCloudRunV2Service{}, nil
 }
 
-func (m *mockServicesAPI) updateService(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) error {
+func (m *mockServicesAPI) updateService(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) (*run.GoogleLongrunningOperation, error) {
 	m.updateCalls = append(m.updateCalls, updateServiceCall{name: name, service: service, updateMask: updateMask})
 	if m.updateServiceFunc != nil {
 		return m.updateServiceFunc(ctx, name, service, updateMask)
 	}
-	return nil
+	return &run.GoogleLongrunningOperation{Name: "operations/test", Done: true}, nil
 }
 
 type updateWorkerPoolCall struct {
@@ -70,7 +74,7 @@ type updateWorkerPoolCall struct {
 
 type mockWorkerPoolsAPI struct {
 	getWorkerPoolFunc    func(ctx context.Context, name string) (*run.GoogleCloudRunV2WorkerPool, error)
-	updateWorkerPoolFunc func(ctx context.Context, name string, workerPool *run.GoogleCloudRunV2WorkerPool, updateMask string) error
+	updateWorkerPoolFunc func(ctx context.Context, name string, workerPool *run.GoogleCloudRunV2WorkerPool, updateMask string) (*run.GoogleLongrunningOperation, error)
 	getCalls             []string
 	updateCalls          []updateWorkerPoolCall
 }
@@ -83,12 +87,41 @@ func (m *mockWorkerPoolsAPI) getWorkerPool(ctx context.Context, name string) (*r
 	return &run.GoogleCloudRunV2WorkerPool{}, nil
 }
 
-func (m *mockWorkerPoolsAPI) updateWorkerPool(ctx context.Context, name string, workerPool *run.GoogleCloudRunV2WorkerPool, updateMask string) error {
+func (m *mockWorkerPoolsAPI) updateWorkerPool(ctx context.Context, name string, workerPool *run.GoogleCloudRunV2WorkerPool, updateMask string) (*run.GoogleLongrunningOperation, error) {
 	m.updateCalls = append(m.updateCalls, updateWorkerPoolCall{name: name, workerPool: workerPool, updateMask: updateMask})
 	if m.updateWorkerPoolFunc != nil {
 		return m.updateWorkerPoolFunc(ctx, name, workerPool, updateMask)
 	}
-	return nil
+	return &run.GoogleLongrunningOperation{Name: "operations/test", Done: true}, nil
+}
+
+// newLogCapture returns a logger that sends every formatted log line to the returned channel.
+func newLogCapture() (logr.Logger, <-chan string) {
+	lines := make(chan string, 10)
+	logger := funcr.New(func(prefix, args string) { lines <- args }, funcr.Options{})
+	return logger, lines
+}
+
+func waitForLogLine(t *testing.T, lines <-chan string) string {
+	t.Helper()
+	select {
+	case line := <-lines:
+		return line
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for a log line")
+		return ""
+	}
+}
+
+func newTestOpClient(svc *mockServicesAPI, wp *mockWorkerPoolsAPI, getOp func(context.Context, string) (*run.GoogleLongrunningOperation, error), logger logr.Logger, timeout time.Duration) *CloudRunClient {
+	return &CloudRunClient{
+		services:       svc,
+		workerPools:    wp,
+		getOperation:   getOp,
+		logger:         logger,
+		opPollInterval: time.Millisecond,
+		opPollTimeout:  timeout,
+	}
 }
 
 func TestCloudRunClient(t *testing.T) {
@@ -180,8 +213,8 @@ func TestCloudRunClient(t *testing.T) {
 
 	t.Run("UpdateWorkerPoolManualInstances_requestRejected_returnsError", func(t *testing.T) {
 		wpAPI := &mockWorkerPoolsAPI{
-			updateWorkerPoolFunc: func(ctx context.Context, name string, workerPool *run.GoogleCloudRunV2WorkerPool, updateMask string) error {
-				return errors.New("rejected")
+			updateWorkerPoolFunc: func(ctx context.Context, name string, workerPool *run.GoogleCloudRunV2WorkerPool, updateMask string) (*run.GoogleLongrunningOperation, error) {
+				return nil, errors.New("rejected")
 			},
 		}
 		client := &CloudRunClient{workerPools: wpAPI}
@@ -226,6 +259,9 @@ func TestCloudRunClient(t *testing.T) {
 		}
 		if got != 25 {
 			t.Errorf("got %d, want 25", got)
+		}
+		if len(svcAPI.getCalls) != 1 || svcAPI.getCalls[0] != testServiceResource {
+			t.Errorf("unexpected getCalls: %v", svcAPI.getCalls)
 		}
 	})
 
@@ -315,6 +351,9 @@ func TestCloudRunClient(t *testing.T) {
 			t.Fatalf("expected 1 update call, got %d", len(svcAPI.updateCalls))
 		}
 		call := svcAPI.updateCalls[0]
+		if call.name != testServiceResource {
+			t.Errorf("got name %q, want %q", call.name, testServiceResource)
+		}
 		if call.service.Template.Scaling.MinInstanceCount != 10 {
 			t.Errorf("got min instance count %d, want 10", call.service.Template.Scaling.MinInstanceCount)
 		}
@@ -348,8 +387,8 @@ func TestCloudRunClient(t *testing.T) {
 
 	t.Run("UpdateServiceMinInstances_requestRejected_returnsError", func(t *testing.T) {
 		svcAPI := &mockServicesAPI{
-			updateServiceFunc: func(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) error {
-				return errors.New("rejected")
+			updateServiceFunc: func(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) (*run.GoogleLongrunningOperation, error) {
+				return nil, errors.New("rejected")
 			},
 		}
 		client := &CloudRunClient{services: svcAPI}
@@ -380,6 +419,9 @@ func TestCloudRunClient(t *testing.T) {
 			t.Fatalf("expected 1 update call, got %d", len(svcAPI.updateCalls))
 		}
 		call := svcAPI.updateCalls[0]
+		if call.name != testServiceResource {
+			t.Errorf("got name %q, want %q", call.name, testServiceResource)
+		}
 		if call.service.Scaling.ManualInstanceCount != 10 {
 			t.Errorf("got manual instance count %d, want 10", call.service.Scaling.ManualInstanceCount)
 		}
@@ -410,8 +452,8 @@ func TestCloudRunClient(t *testing.T) {
 
 	t.Run("UpdateServiceManualInstances_requestRejected_returnsError", func(t *testing.T) {
 		svcAPI := &mockServicesAPI{
-			updateServiceFunc: func(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) error {
-				return errors.New("rejected")
+			updateServiceFunc: func(ctx context.Context, name string, service *run.GoogleCloudRunV2Service, updateMask string) (*run.GoogleLongrunningOperation, error) {
+				return nil, errors.New("rejected")
 			},
 		}
 		client := &CloudRunClient{services: svcAPI}
@@ -436,4 +478,149 @@ func TestCloudRunClient(t *testing.T) {
 			t.Errorf("got %d update calls, want 2", len(svcAPI.updateCalls))
 		}
 	})
+}
+
+func TestCloudRunClient_logsHowUpdateOperationsEnd(t *testing.T) {
+	ctx := context.Background()
+	pending := &run.GoogleLongrunningOperation{Name: "operations/op-1"}
+
+	tests := []struct {
+		name          string
+		updateOp      *run.GoogleLongrunningOperation
+		updateErr     error
+		workerPool    bool
+		pollTimeout   time.Duration
+		pollResponses []*run.GoogleLongrunningOperation
+		pollErr       error
+		wantErr       bool
+		wantLogParts  []string
+		wantPollCount int
+		wantZeroLogs  bool
+	}{
+		{
+			name:          "operationCompletes_logsCompletion",
+			updateOp:      pending,
+			pollResponses: []*run.GoogleLongrunningOperation{{Name: "operations/op-1"}, {Name: "operations/op-1", Done: true}},
+			wantLogParts:  []string{"Update operation completed", `"resource"="` + testServiceResource + `"`},
+			wantPollCount: 2,
+		},
+		{
+			name:          "operationFails_logsFailureWithCause",
+			updateOp:      pending,
+			workerPool:    true,
+			pollResponses: []*run.GoogleLongrunningOperation{{Name: "operations/op-1", Done: true, Error: &run.GoogleRpcStatus{Code: 9, Message: "revision is not ready"}}},
+			wantLogParts:  []string{"Update operation failed", `"resource"="` + testWorkerPoolResource + `"`, "revision is not ready (code 9)"},
+			wantPollCount: 1,
+		},
+		{
+			name:          "operationAlreadyDone_logsWithoutPolling",
+			updateOp:      &run.GoogleLongrunningOperation{Name: "operations/done", Done: true},
+			wantLogParts:  []string{"Update operation completed", `"resource"="` + testServiceResource + `"`},
+			wantPollCount: 0,
+		},
+		{
+			name:          "pollingFails_logsThatTheOutcomeIsUnknown",
+			updateOp:      pending,
+			pollErr:       errors.New("permission denied"),
+			wantLogParts:  []string{"Update operation failed", `"resource"="` + testServiceResource + `"`, "failed to check operation", "permission denied"},
+			wantPollCount: 1,
+		},
+		{
+			name:          "pollingTransportDeadlineExceeded_logsPollingFailure",
+			updateOp:      pending,
+			pollErr:       context.DeadlineExceeded,
+			wantLogParts:  []string{"Update operation failed", `"resource"="` + testServiceResource + `"`, "failed to check operation", context.DeadlineExceeded.Error()},
+			wantPollCount: 1,
+		},
+		{
+			name:          "operationOutlivesPollingTimeout_logsTimeout",
+			updateOp:      pending,
+			pollTimeout:   20 * time.Millisecond,
+			pollResponses: []*run.GoogleLongrunningOperation{pending},
+			wantLogParts:  []string{"Update operation failed", `"resource"="` + testServiceResource + `"`, "timed out waiting for operation", context.DeadlineExceeded.Error()},
+			wantPollCount: -1, // varies with scheduling within 20ms
+		},
+		{
+			name:         "updateRejected_logsNothing",
+			updateErr:    errors.New("rejected"),
+			wantErr:      true,
+			wantZeroLogs: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var polled []string
+			idx := 0
+			getOp := func(ctx context.Context, name string) (*run.GoogleLongrunningOperation, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				polled = append(polled, name)
+				if tc.pollErr != nil {
+					return nil, tc.pollErr
+				}
+				op := tc.pollResponses[min(idx, len(tc.pollResponses)-1)]
+				idx++
+				return op, nil
+			}
+
+			timeout := tc.pollTimeout
+			if timeout == 0 {
+				timeout = 5 * time.Second
+			}
+			logger, lines := newLogCapture()
+
+			var svcAPI *mockServicesAPI
+			var wpAPI *mockWorkerPoolsAPI
+			if tc.workerPool {
+				wpAPI = &mockWorkerPoolsAPI{
+					updateWorkerPoolFunc: func(context.Context, string, *run.GoogleCloudRunV2WorkerPool, string) (*run.GoogleLongrunningOperation, error) {
+						return tc.updateOp, tc.updateErr
+					},
+				}
+			} else {
+				svcAPI = &mockServicesAPI{
+					updateServiceFunc: func(context.Context, string, *run.GoogleCloudRunV2Service, string) (*run.GoogleLongrunningOperation, error) {
+						return tc.updateOp, tc.updateErr
+					},
+				}
+			}
+
+			client := newTestOpClient(svcAPI, wpAPI, getOp, logger, timeout)
+			var err error
+			if tc.workerPool {
+				err = client.UpdateWorkerPoolManualInstances(ctx, testWorkerPoolName, 10, testProjectID, testRegion)
+			} else {
+				err = client.UpdateServiceManualInstances(ctx, testServiceName, 10, testProjectID, testRegion)
+			}
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("got err=%v, wantErr=%v", err, tc.wantErr)
+			}
+
+			if tc.wantZeroLogs {
+				select {
+				case line := <-lines:
+					t.Errorf("got unexpected log line %q", line)
+				case <-time.After(30 * time.Millisecond):
+				}
+				return
+			}
+
+			line := waitForLogLine(t, lines)
+			for _, want := range tc.wantLogParts {
+				if !strings.Contains(line, want) {
+					t.Errorf("got log line %q, want substring %q", line, want)
+				}
+			}
+			if tc.wantPollCount >= 0 {
+				mu.Lock()
+				got := append([]string(nil), polled...)
+				mu.Unlock()
+				if len(got) != tc.wantPollCount {
+					t.Errorf("got %d polls (%v), want %d", len(got), got, tc.wantPollCount)
+				}
+			}
+		})
+	}
 }
