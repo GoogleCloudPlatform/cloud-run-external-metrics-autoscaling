@@ -176,7 +176,7 @@ CREMA_SERVICE_ACCOUNT_NAME=crema-service-account
 PARAMETER_VERSION=1
 
 CREMA_CONFIG_PARAM_VERSION=projects/$PROJECT_ID/locations/$PARAMETER_REGION/parameters/$PARAMETER_ID/versions/$PARAMETER_VERSION
-IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.4
+IMAGE=us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:2.0
 
 gcloud run deploy $SERVICE_NAME \
   --image=${IMAGE} \
@@ -192,7 +192,7 @@ gcloud run deploy $SERVICE_NAME \
 
 Note: The container is built using `FROM scratch` to support [automatic base image updates](https://cloud.google.com/run/docs/configuring/services/automatic-base-image-updates). Although matching the base image region to the service region is ideal, it's not strictly required as Cloud Run does not provide base images in all Cloud Run regions.
 
-Note: From release `1.4` on, CREMA is a single Go binary and uses the OS-only base image (`osonly24`). Releases `1.3` and earlier include a Java scaler and need the `java25` base image instead (`${BASE_IMAGE_REGION}-docker.pkg.dev/serverless-runtimes/google-24/runtimes/java25`). A deployment that already uses the `java25` base image keeps working when it moves to `1.4`.
+Note: From release `2.0` on, CREMA is a single Go binary and uses the OS-only base image (`osonly24`). Releases `1.3` and earlier include a Java scaler and need the `java25` base image instead (`${BASE_IMAGE_REGION}-docker.pkg.dev/serverless-runtimes/google-24/runtimes/java25`). A deployment that already uses the `java25` base image keeps working when it moves to `2.0`.
 
 The following environment variables are checked by the container:
 - `CREMA_CONFIG`: Required. The fully qualified name (FQN) of the parameter version which contains your CREMA config.
@@ -294,7 +294,7 @@ If configured, CREMA will emit the following metrics:
 
 | Release Image Tag | Supported KEDA Version | Release Status / Details |
 |:------------------|:-----------------------|:-------------------------|
-| `1.4`             | `v2.21`                | The scaler is part of the Go binary; uses the OS-only base image. Preferred release tag. |
+| `2.0`             | `v2.21`                | The scaler is part of the Go binary; uses the OS-only base image. Preferred release tag. |
 | `1.3`             | `v2.21`                | Last release that includes the Java scaler; needs the `java25` base image. |
 | `1.2`             | `v2.20`                | Legacy release. This version will no longer receive future updates or bug fixes. |
 | `1.1`             | `v2.19`                | Legacy release. This version will no longer receive future updates or bug fixes. |

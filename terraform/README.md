@@ -67,7 +67,7 @@ module "crema" {
 | `service_account_email` | The email address of the service account used by the CREMA service. | `string` | n/a | yes |
 | `crema_config` | The fully qualified name (FQN) of the parameter version in Parameter Manager which contains the CREMA config. | `string` | n/a | yes |
 | `service_name` | The name of the CREMA Cloud Run service. | `string` | `"crema"` | no |
-| `image` | The CREMA container image to deploy. | `string` | `"us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:1.4"` | no |
+| `image` | The CREMA container image to deploy. | `string` | `"us-central1-docker.pkg.dev/cloud-run-oss-images/crema-v1/autoscaler:2.0"` | no |
 | `base_image` | The base image to use for automatic base image updates. Releases `1.3` and earlier need `us-central1-docker.pkg.dev/serverless-runtimes/google-24/runtimes/java25`. | `string` | `"us-central1-docker.pkg.dev/serverless-runtimes/google-24/runtimes/osonly24"` | no |
 | `output_scaler_metrics` | Whether CREMA should emit metrics to Cloud Monitoring. | `bool` | `false` | no |
 | `enable_cloud_logging` | Whether CREMA should log errors to Cloud Logging for improved log searchability. | `bool` | `false` | no |
